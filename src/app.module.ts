@@ -20,6 +20,7 @@ import { AcademicModule } from './AcademicFunction/academic.module';
     }),
 
      AcademicModule,
+
   ],
   controllers: [AppController],
   providers: [AppService],
