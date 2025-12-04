@@ -4,6 +4,7 @@ import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AcademicModule } from './AcademicFunction/academic.module';
+import { AdmissionModule } from './Admission/admission.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AcademicModule } from './AcademicFunction/academic.module';
     }),
 
      AcademicModule,
+     AdmissionModule
 
   ],
   controllers: [AppController],
