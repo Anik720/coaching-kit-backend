@@ -274,23 +274,29 @@ async validateUser(email: string, password: string): Promise<Omit<IUser, 'passwo
    * Helper method to get user ID from user object
    * Handles both _id (Mongoose document) and id (converted object)
    */
-  private getUserId(user: IUser): string | undefined {
-    // Check for _id first (could be string or ObjectId)
-    if (user._id) {
-      if (typeof user._id === 'string') {
-        return user._id;
-      } else if (user._id instanceof Types.ObjectId) {
-        return user._id.toString();
-      } else if (user._id && typeof user._id === 'object' && 'toString' in user._id) {
-        return (user._id as any).toString();
-      }
+private getUserId(user: IUser): string | undefined {
+  console.log('AuthService.getUserId - User object:', user);
+  console.log('AuthService.getUserId - User keys:', Object.keys(user));
+  
+  // Check for _id first (could be string or ObjectId)
+  if (user._id) {
+    console.log('AuthService.getUserId - Found _id:', user._id);
+    if (typeof user._id === 'string') {
+      return user._id;
+    } else if (user._id instanceof Types.ObjectId) {
+      return user._id.toString();
+    } else if (user._id && typeof user._id === 'object' && 'toString' in user._id) {
+      return (user._id as any).toString();
     }
-    
-    // Check for id field (should already be a string after toIUser conversion)
-    if (user.id) {
-      return String(user.id); // Use String() to ensure it's a string
-    }
-    
-    return undefined;
   }
+  
+  // Check for id field (should already be a string after toIUser conversion)
+  if (user.id) {
+    console.log('AuthService.getUserId - Found id:', user.id);
+    return String(user.id); // Use String() to ensure it's a string
+  }
+  
+  console.log('AuthService.getUserId - No ID found');
+  return undefined;
+}
 }
