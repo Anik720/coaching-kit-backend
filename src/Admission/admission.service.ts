@@ -1,6 +1,10 @@
-// admission/admission.service.ts
-
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { 
+  Injectable, 
+  NotFoundException, 
+  BadRequestException,
+  ConflictException,
+  ForbiddenException 
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateAdmissionDto } from './dto/create-admission.dto';
@@ -8,7 +12,7 @@ import { UpdateAdmissionDto } from './dto/update-admission.dto';
 import { Admission, AdmissionDocument, AdmissionStatus, Gender, Religion } from './schema/admission.schema';
 
 @Injectable()
-export class AdmissionService {s
+export class AdmissionService {
   constructor(
     @InjectModel(Admission.name)
     private admissionModel: Model<AdmissionDocument>,
@@ -45,7 +49,7 @@ export class AdmissionService {s
       });
       
       if (existing) {
-        throw new BadRequestException('Registration ID already exists');
+        throw new ConflictException('Registration ID already exists');
       }
 
       // Parse dates
@@ -142,7 +146,7 @@ export class AdmissionService {s
     } catch (error: any) {
       console.error('Error creating admission:', error);
       if (error.code === 11000) {
-        throw new BadRequestException('Registration ID already exists');
+        throw new ConflictException('Registration ID already exists');
       }
       if (error.name === 'ValidationError') {
         throw new BadRequestException(`Validation failed: ${error.message}`);
@@ -225,7 +229,7 @@ export class AdmissionService {s
       return admission;
     } catch (error: any) {
       if (error.code === 11000) {
-        throw new BadRequestException('Registration ID already exists');
+        throw new ConflictException('Registration ID already exists');
       }
       throw error;
     }
@@ -233,7 +237,13 @@ export class AdmissionService {s
 
   // Find admission by registration ID
   async findByRegistrationId(registrationId: string): Promise<AdmissionDocument> {
-    const admission = await this.admissionModel.findOne({ registrationId });
+    if (!registrationId || registrationId.trim().length === 0) {
+      throw new BadRequestException('Registration ID is required');
+    }
+
+    const admission = await this.admissionModel.findOne({ 
+      registrationId: registrationId.trim() 
+    });
     
     if (!admission) {
       throw new NotFoundException(`Admission with registration ID ${registrationId} not found`);
@@ -316,7 +326,13 @@ export class AdmissionService {s
 
   // Delete admission by registration ID
   async delete(registrationId: string): Promise<void> {
-    const result = await this.admissionModel.deleteOne({ registrationId });
+    if (!registrationId || registrationId.trim().length === 0) {
+      throw new BadRequestException('Registration ID is required');
+    }
+
+    const result = await this.admissionModel.deleteOne({ 
+      registrationId: registrationId.trim() 
+    });
     
     if (result.deletedCount === 0) {
       throw new NotFoundException(`Admission with registration ID ${registrationId} not found`);
@@ -367,5 +383,25 @@ export class AdmissionService {s
       thisMonthAdmissions,
       totalRevenue: totalRevenue[0]?.total || 0,
     };
+  }
+
+  // Get admissions by batch ID
+  async getAdmissionsByBatchId(batchId: number) {
+    if (!batchId || isNaN(batchId)) {
+      throw new BadRequestException('Valid batch ID is required');
+    }
+
+    const admissions = await this.admissionModel.find({
+      'batches.batchId': batchId
+    }).exec();
+
+    return admissions;
+  }
+
+  // Get pending admissions count
+  async getPendingCount(): Promise<number> {
+    return this.admissionModel.countDocuments({ 
+      status: AdmissionStatus.PENDING 
+    }).exec();
   }
 }

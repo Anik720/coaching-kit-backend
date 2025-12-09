@@ -1,12 +1,15 @@
-// student/dto/create-student.dto.ts
 import { 
   IsString, IsEnum, IsDate, IsNumber, IsOptional, 
-  Min, Matches, IsBoolean, IsMongoId 
+  Min, Matches, IsBoolean, IsMongoId, IsNotEmpty 
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Gender, Religion, AdmissionType } from '../schemas/student.schema';
 
 export class CreateStudentDto {
+  @IsString()
+  @IsNotEmpty()
+  registrationId: string;
+
   @IsMongoId()
   class: string;
 
