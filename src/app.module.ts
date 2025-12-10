@@ -8,6 +8,7 @@ import { StudentModule } from './student/student.module';
 import { AdmissionModule } from './Admission/admission.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/user.module';
+import { SuggestionComplaintModule } from './suggestion-complaint/suggestion-complaint.module';
 
 
 @Module({
@@ -28,7 +29,8 @@ import { UsersModule } from './users/user.module';
      StudentModule,
      AdmissionModule,
      AuthModule,
-     UsersModule
+     UsersModule,
+     SuggestionComplaintModule
 
   ],
   controllers: [AppController],
