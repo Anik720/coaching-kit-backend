@@ -26,26 +26,28 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: TokenPayload) {
     try {
+      console.log('JWT Strategy - Payload received:', payload);
+      
       // Fetch user from database to ensure they still exist
       const user = await this.usersService.findOne(payload.sub);
       
       if (!user) {
+        console.log('JWT Strategy - User not found for ID:', payload.sub);
         throw new UnauthorizedException({
           message: 'User account not found or has been deleted',
           code: 'USER_NOT_FOUND',
         });
       }
 
-      // Check if user is active (add this to your user model if needed)
-      // if (!user.isActive) {
-      //   throw new UnauthorizedException({
-      //     message: 'User account is deactivated',
-      //     code: 'USER_INACTIVE',
-      //   });
-      // }
+      console.log('JWT Strategy - User found:', {
+        _id: user.id,
+        email: user.email,
+        role: user.role
+      });
 
+      // Return user with proper _id field
       return {
-        _id: user._id,
+        _id: user.id, // Make sure this is included
         email: user.email,
         role: user.role,
         // Add other user properties as needed
@@ -57,7 +59,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
       
       // Log unexpected errors for debugging
-      console.error('JWT validation error:', error);
+      console.error('JWT Strategy - Validation error:', error);
       
       throw new UnauthorizedException({
         message: 'Invalid authentication token',

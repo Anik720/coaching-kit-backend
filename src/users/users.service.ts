@@ -143,23 +143,31 @@ export class UsersService {
     }
   }
 
-  async findOne(id: string): Promise<IUser> {
-    try {
-      if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid ID');
-      
-      const user = await this.userModel.findById(id);
-      if (!user) throw new NotFoundException('User not found');
-      
-      return this.toIUser(user);
-    } catch (error) {
-      console.error('Find one user error:', error);
-      if (error instanceof BadRequestException || 
-          error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new InternalServerErrorException('Failed to fetch user');
+async findOne(id: string): Promise<IUser> {
+  try {
+    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid ID');
+    
+    const user = await this.userModel.findById(id);
+    if (!user) throw new NotFoundException('User not found');
+    console.log("user found:", user);
+    
+    const userObj = this.toIUser(user);
+    console.log('UsersService.findOne - Returning user:', {
+      id,
+      _id: id,
+      email: userObj.email
+    });
+    
+    return userObj;
+  } catch (error) {
+    console.error('Find one user error:', error);
+    if (error instanceof BadRequestException || 
+        error instanceof NotFoundException) {
+      throw error;
     }
+    throw new InternalServerErrorException('Failed to fetch user');
   }
+}
 
   async findByEmail(email: string): Promise<UserDocument | null> {
     try {

@@ -11,6 +11,7 @@ import {
   HttpStatus,
   HttpCode,
   Query,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -29,6 +30,7 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '../../shared/interfaces/user.interface';
 import { AuthExceptionFilter } from '../../shared/filters/auth-exception.filter';
+import type { Request } from 'express';
 
 @ApiTags('academic/class')
 @ApiBearerAuth('JWT-auth')
@@ -51,6 +53,12 @@ export class ClassController {
         classname: 'Class 10',
         description: 'Tenth standard class',
         isActive: true,
+        createdBy: {
+          _id: '507f1f77bcf86cd799439022',
+          email: 'admin@example.com',
+          username: 'admin',
+          role: 'user_admin'
+        },
         createdAt: '2023-12-06T10:30:00.000Z',
         updatedAt: '2023-12-06T10:30:00.000Z',
       },
@@ -106,8 +114,25 @@ export class ClassController {
       },
     },
   })
-  create(@Body() dto: CreateClassDto) {
-    return this.classService.create(dto);
+  create(
+    @Body() dto: CreateClassDto,
+    @Req() req: Request
+  ) {
+    console.log('=== Controller Debug ===');
+    console.log('Request user object:', req.user);
+    console.log('User ID from request:', (req.user as any)?._id);
+    
+    const user = req.user as any;
+    
+    if (!user || !user._id) {
+      console.error('ERROR: No user or user._id found in request');
+      throw new Error('User authentication failed - no user ID found');
+    }
+    
+    console.log('Passing userId to service:', user._id);
+    console.log('=== End Controller Debug ===');
+    
+    return this.classService.create(dto, user._id);
   }
 
   @Get()
@@ -164,6 +189,18 @@ export class ClassController {
             classname: 'Class 10',
             description: 'Tenth standard class',
             isActive: true,
+            createdBy: {
+              _id: '507f1f77bcf86cd799439022',
+              email: 'admin@example.com',
+              username: 'admin',
+              role: 'user_admin'
+            },
+            updatedBy: {
+              _id: '507f1f77bcf86cd799439022',
+              email: 'admin@example.com',
+              username: 'admin',
+              role: 'user_admin'
+            },
             createdAt: '2023-12-06T10:30:00.000Z',
             updatedAt: '2023-12-06T10:30:00.000Z',
           },
@@ -172,6 +209,13 @@ export class ClassController {
             classname: 'Class 9',
             description: 'Ninth standard class',
             isActive: true,
+            createdBy: {
+              _id: '507f1f77bcf86cd799439023',
+              email: 'teacher@example.com',
+              username: 'teacher',
+              role: 'staff'
+            },
+            updatedBy: null,
             createdAt: '2023-12-06T10:30:00.000Z',
             updatedAt: '2023-12-06T10:30:00.000Z',
           },
@@ -247,6 +291,18 @@ export class ClassController {
         classname: 'Class 10',
         description: 'Tenth standard class',
         isActive: true,
+        createdBy: {
+          _id: '507f1f77bcf86cd799439022',
+          email: 'admin@example.com',
+          username: 'admin',
+          role: 'user_admin'
+        },
+        updatedBy: {
+          _id: '507f1f77bcf86cd799439022',
+          email: 'admin@example.com',
+          username: 'admin',
+          role: 'user_admin'
+        },
         createdAt: '2023-12-06T10:30:00.000Z',
         updatedAt: '2023-12-06T10:30:00.000Z',
       },
@@ -313,6 +369,18 @@ export class ClassController {
         classname: 'Class 10 Updated',
         description: 'Updated tenth standard class',
         isActive: true,
+        createdBy: {
+          _id: '507f1f77bcf86cd799439022',
+          email: 'admin@example.com',
+          username: 'admin',
+          role: 'user_admin'
+        },
+        updatedBy: {
+          _id: '507f1f77bcf86cd799439023',
+          email: 'teacher@example.com',
+          username: 'teacher',
+          role: 'staff'
+        },
         createdAt: '2023-12-06T10:30:00.000Z',
         updatedAt: '2023-12-06T11:30:00.000Z',
       },
@@ -379,8 +447,16 @@ export class ClassController {
       },
     },
   })
-  update(@Param('id') id: string, @Body() dto: UpdateClassDto) {
-    return this.classService.update(id, dto);
+  update(
+    @Param('id') id: string, 
+    @Body() dto: UpdateClassDto,
+    @Req() req: Request
+  ) {
+    const user = req.user as any;
+    if (!user || !user._id) {
+      throw new Error('User authentication failed - no user ID found');
+    }
+    return this.classService.update(id, dto, user._id);
   }
 
   @Delete(':id')
@@ -467,6 +543,18 @@ export class ClassController {
           _id: '507f1f77bcf86cd799439011',
           classname: 'Class 10',
           isActive: true,
+          createdBy: {
+            _id: '507f1f77bcf86cd799439022',
+            email: 'admin@example.com',
+            username: 'admin',
+            role: 'user_admin'
+          },
+          updatedBy: {
+            _id: '507f1f77bcf86cd799439022',
+            email: 'admin@example.com',
+            username: 'admin',
+            role: 'user_admin'
+          },
         },
         totalBatches: 5,
         activeBatches: 3,
@@ -534,6 +622,18 @@ export class ClassController {
         _id: '507f1f77bcf86cd799439011',
         classname: 'Class 10',
         isActive: false,
+        createdBy: {
+          _id: '507f1f77bcf86cd799439022',
+          email: 'admin@example.com',
+          username: 'admin',
+          role: 'user_admin'
+        },
+        updatedBy: {
+          _id: '507f1f77bcf86cd799439023',
+          email: 'teacher@example.com',
+          username: 'teacher',
+          role: 'staff'
+        },
         message: 'Class status updated successfully',
       },
     },
@@ -577,7 +677,28 @@ export class ClassController {
       },
     },
   })
-  async toggleActive(@Param('id') id: string) {
-    return this.classService.toggleActive(id);
+  async toggleActive(
+    @Param('id') id: string,
+    @Req() req: Request
+  ) {
+    const user = req.user as any;
+    if (!user || !user._id) {
+      throw new Error('User authentication failed - no user ID found');
+    }
+    return this.classService.toggleActive(id, user._id);
+  }
+
+  // Add a debug endpoint to check user info
+  @Get('debug/user-info')
+  @UseGuards(JwtAuthGuard)
+  debugUserInfo(@Req() req: Request) {
+    const user = req.user as any;
+    return {
+      message: 'Debug user information',
+      user: user,
+      userId: user?._id,
+      userType: typeof user?._id,
+      isObjectId: require('mongoose').Types.ObjectId.isValid(user?._id)
+    };
   }
 }
