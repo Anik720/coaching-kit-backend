@@ -1,3 +1,4 @@
+// batch.service.ts
 import {
   Injectable,
   NotFoundException,
@@ -44,11 +45,20 @@ export class BatchService {
         );
       }
 
+      // Auto-generate sessionYear from batchStartingDate if not provided
+      let sessionYear = createBatchDto.sessionYear;
+      if (!sessionYear) {
+        const startYear = startingDate.getFullYear();
+        sessionYear = `${startYear}-${startYear + 1}`;
+      }
+
       const batch = new this.batchModel({
         ...createBatchDto,
+        sessionYear, // Use auto-generated or provided sessionYear
         className: new Types.ObjectId(createBatchDto.className),
         group: new Types.ObjectId(createBatchDto.group),
         subject: new Types.ObjectId(createBatchDto.subject),
+        createdBy: new Types.ObjectId(createBatchDto.createdBy),
       });
 
       return await batch.save();
@@ -75,6 +85,7 @@ export class BatchService {
       sessionYear,
       status,
       isActive,
+      createdBy,
       page = 1,
       limit = 10,
       sortBy = 'createdAt',
@@ -117,23 +128,32 @@ export class BatchService {
       filter.isActive = isActive === 'true';
     }
 
+    if (createdBy) {
+      filter.createdBy = new Types.ObjectId(createdBy);
+    }
+
     // Get total count
     const total = await this.batchModel.countDocuments(filter);
 
-    // Build query
+    // Build query with population - Removed .lean() and fixed populate for createdBy
     const batchQuery = this.batchModel
       .find(filter)
       .populate('className', 'classname')
       .populate('group', 'groupName')
       .populate('subject', 'subjectName')
+      .populate({
+        path: 'createdBy',
+        select: 'username email firstName lastName',
+      })
       .skip(skip)
       .limit(limit)
       .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 });
 
     const data = await batchQuery.exec();
+    console.log('Fetched batches:', data);
 
     return {
-      data,
+      data: data,
       total,
       page: Number(page),
       limit: Number(limit),
@@ -148,9 +168,26 @@ export class BatchService {
 
     const batch = await this.batchModel
       .findById(id)
-      .populate('className', 'classname')
-      .populate('group', 'groupName')
-      .populate('subject', 'subjectName')
+      .populate({
+        path: 'className',
+        select: 'classname',
+        model: 'Class',
+      })
+      .populate({
+        path: 'group',
+        select: 'groupName',
+        model: 'Group',
+      })
+      .populate({
+        path: 'subject',
+        select: 'subjectName',
+        model: 'Subject',
+      })
+      .populate({
+        path: 'createdBy',
+        select: 'username email firstName lastName',
+        model: 'User',
+      })
       .exec();
 
     if (!batch) {
@@ -199,6 +236,9 @@ export class BatchService {
     if (updateBatchDto.subject) {
       updateData.subject = new Types.ObjectId(updateBatchDto.subject);
     }
+    if (updateBatchDto.createdBy) {
+      updateData.createdBy = new Types.ObjectId(updateBatchDto.createdBy);
+    }
 
     // Validate dates if provided
     if (updateBatchDto.batchStartingDate || updateBatchDto.batchClosingDate) {
@@ -218,9 +258,26 @@ export class BatchService {
 
     const updatedBatch = await this.batchModel
       .findByIdAndUpdate(id, updateData, { new: true, runValidators: true })
-      .populate('className', 'classname')
-      .populate('group', 'groupName')
-      .populate('subject', 'subjectName')
+      .populate({
+        path: 'className',
+        select: 'classname',
+        model: 'Class',
+      })
+      .populate({
+        path: 'group',
+        select: 'groupName',
+        model: 'Group',
+      })
+      .populate({
+        path: 'subject',
+        select: 'subjectName',
+        model: 'Subject',
+      })
+      .populate({
+        path: 'createdBy',
+        select: 'username email firstName lastName',
+        model: 'User',
+      })
       .exec();
 
     if (!updatedBatch) {
@@ -235,7 +292,14 @@ export class BatchService {
       throw new BadRequestException('Invalid batch ID');
     }
 
-    const batch = await this.batchModel.findByIdAndDelete(id).exec();
+    const batch = await this.batchModel
+      .findByIdAndDelete(id)
+      .populate({
+        path: 'createdBy',
+        select: 'username email firstName lastName',
+        model: 'User',
+      })
+      .exec();
 
     if (!batch) {
       throw new NotFoundException(`Batch with ID ${id} not found`);
@@ -249,13 +313,23 @@ export class BatchService {
       throw new BadRequestException('Invalid batch ID');
     }
 
-    const batch = await this.batchModel.findById(id);
+    const batch = await this.batchModel
+      .findById(id)
+      .populate({
+        path: 'createdBy',
+        select: 'username email firstName lastName',
+        model: 'User',
+      })
+      .exec();
+
     if (!batch) {
       throw new NotFoundException(`Batch with ID ${id} not found`);
     }
 
     batch.isActive = !batch.isActive;
-    return await batch.save();
+    await batch.save();
+    
+    return batch;
   }
 
   async getStats(): Promise<IBatchStats> {
@@ -298,9 +372,26 @@ export class BatchService {
         batchStartingDate: { $gte: startDate },
         batchClosingDate: { $lte: endDate },
       })
-      .populate('className', 'classname')
-      .populate('group', 'groupName')
-      .populate('subject', 'subjectName')
+      .populate({
+        path: 'className',
+        select: 'classname',
+        model: 'Class',
+      })
+      .populate({
+        path: 'group',
+        select: 'groupName',
+        model: 'Group',
+      })
+      .populate({
+        path: 'subject',
+        select: 'subjectName',
+        model: 'Subject',
+      })
+      .populate({
+        path: 'createdBy',
+        select: 'username email firstName lastName',
+        model: 'User',
+      })
       .exec();
   }
 
@@ -309,7 +400,15 @@ export class BatchService {
     currentStudents: number;
     maxStudents: number;
   }> {
-    const batch = await this.batchModel.findById(batchId);
+    const batch = await this.batchModel
+      .findById(batchId)
+      .populate({
+        path: 'createdBy',
+        select: 'username email firstName lastName',
+        model: 'User',
+      })
+      .exec();
+
     if (!batch) {
       throw new NotFoundException(`Batch with ID ${batchId} not found`);
     }
@@ -322,6 +421,109 @@ export class BatchService {
       available: currentStudents < batch.maxStudents,
       currentStudents,
       maxStudents: batch.maxStudents,
+    };
+  }
+
+  // Additional method to get batches created by a specific user
+  async getBatchesByCreator(userId: string, query: BatchQueryDto): Promise<{
+    data: Batch[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+
+    const {
+      search,
+      className,
+      group,
+      subject,
+      sessionYear,
+      status,
+      isActive,
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = query;
+
+    const skip = (page - 1) * limit;
+    const filter: any = { createdBy: new Types.ObjectId(userId) };
+
+    // Build additional filters
+    if (search) {
+      filter.$or = [
+        { batchName: { $regex: search, $options: 'i' } },
+        { sessionYear: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    if (className) {
+      filter.className = new Types.ObjectId(className);
+    }
+
+    if (group) {
+      filter.group = new Types.ObjectId(group);
+    }
+
+    if (subject) {
+      filter.subject = new Types.ObjectId(subject);
+    }
+
+    if (sessionYear) {
+      filter.sessionYear = sessionYear;
+    }
+
+    if (status) {
+      filter.status = status;
+    }
+
+    if (isActive !== undefined) {
+      filter.isActive = isActive === 'true';
+    }
+
+    // Get total count
+    const total = await this.batchModel.countDocuments(filter);
+
+    // Build query
+    const batchQuery = this.batchModel
+      .find(filter)
+      .populate({
+        path: 'className',
+        select: 'classname',
+        model: 'Class',
+      })
+      .populate({
+        path: 'group',
+        select: 'groupName',
+        model: 'Group',
+      })
+      .populate({
+        path: 'subject',
+        select: 'subjectName',
+        model: 'Subject',
+      })
+      .populate({
+        path: 'createdBy',
+        select: 'username email firstName lastName',
+        model: 'User',
+      })
+      .skip(skip)
+      .limit(limit)
+      .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 });
+
+    const data = await batchQuery.exec();
+
+    return {
+      data,
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      totalPages: Math.ceil(total / limit),
     };
   }
 }

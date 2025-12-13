@@ -6,6 +6,7 @@ import { Batch, BatchSchema } from './batch.schema';
 import { Class, ClassSchema } from '../class/class.schema';
 import { Subject, SubjectSchema } from '../subject/subject.schema';
 import { Group, GroupSchema } from '../group/group.schema';
+import { User, UserSchema } from 'src/users/schemas/user.schema';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { Group, GroupSchema } from '../group/group.schema';
       { name: Class.name, schema: ClassSchema },
       { name: Subject.name, schema: SubjectSchema },
       { name: Group.name, schema: GroupSchema },
+       { name: User.name, schema: UserSchema },
     ]),
   ],
   controllers: [BatchController],

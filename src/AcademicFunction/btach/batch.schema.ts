@@ -3,6 +3,8 @@ import { Document, Types } from 'mongoose';
 import { Class } from '../class/class.schema';
 import { Subject } from '../subject/subject.schema';
 import { Group } from '../group/group.schema';
+import { User } from 'src/users/schemas/user.schema';
+
 
 export type BatchDocument = Batch & Document;
 
@@ -40,7 +42,7 @@ export class Batch {
   subject: Types.ObjectId;
 
   @Prop({
-    required: true,
+    required: false, // Changed from required: true
     validate: {
       validator: (value: string) => /^\d{4}-\d{4}$/.test(value),
       message: 'Session year must be in format YYYY-YYYY',
@@ -100,10 +102,19 @@ export class Batch {
   })
   maxStudents: number;
 
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  })
+  createdBy: Types.ObjectId;
+
   // Virtual populate for referencing
   classDetails?: Class;
   groupDetails?: Group;
   subjectDetails?: Subject;
+  creatorDetails?: User;
 }
 
 export const BatchSchema = SchemaFactory.createForClass(Batch);
@@ -119,6 +130,7 @@ BatchSchema.index({ sessionYear: 1 });
 BatchSchema.index({ batchStartingDate: 1 });
 BatchSchema.index({ batchClosingDate: 1 });
 BatchSchema.index({ status: 1, isActive: 1 });
+BatchSchema.index({ createdBy: 1 });
 
 // Virtual population
 BatchSchema.virtual('classDetails', {
@@ -142,16 +154,33 @@ BatchSchema.virtual('subjectDetails', {
   justOne: true,
 });
 
-// Pre-save middleware to validate dates
+BatchSchema.virtual('creatorDetails', {
+  ref: 'User',
+  localField: 'createdBy',
+  foreignField: '_id',
+  justOne: true,
+});
+
+// Pre-save middleware to validate dates and auto-generate sessionYear
 BatchSchema.pre('save', function (next) {
+  // Validate dates
   if (this.batchStartingDate >= this.batchClosingDate) {
     next(new Error('Batch starting date must be before closing date'));
+    return;
   }
   
   // Calculate session year from starting date if not provided
   if (!this.sessionYear && this.batchStartingDate) {
     const startYear = this.batchStartingDate.getFullYear();
     this.sessionYear = `${startYear}-${startYear + 1}`;
+  } else if (this.sessionYear && !/^\d{4}-\d{4}$/.test(this.sessionYear)) {
+    // Validate sessionYear format if provided
+    next(new Error('Session year must be in format YYYY-YYYY'));
+    return;
+  } else if (!this.sessionYear) {
+    // If no sessionYear and no batchStartingDate (though batchStartingDate is required)
+    next(new Error('Session year is required'));
+    return;
   }
   
   next();

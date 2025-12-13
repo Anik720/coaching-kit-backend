@@ -1,4 +1,21 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, getSchemaPath } from '@nestjs/swagger';
+
+export class UserResponse {
+  @ApiProperty()
+  _id: string;
+
+  @ApiProperty()
+  username: string;
+
+  @ApiProperty()
+  email: string;
+
+  @ApiProperty()
+  firstName: string;
+
+  @ApiProperty()
+  lastName: string;
+}
 
 export class ClassResponse {
   @ApiProperty()
@@ -31,22 +48,22 @@ export class BatchResponseDto {
   @ApiProperty()
   batchName: string;
 
-  @ApiProperty({ type: () => Object, oneOf: [
-    { type: 'string' },
-    { $ref: '#/components/schemas/ClassResponse' }
-  ]})
+  @ApiProperty({
+    type: () => Object,
+    oneOf: [{ type: 'string' }, { $ref: getSchemaPath(ClassResponse) }],
+  })
   className: string | ClassResponse;
 
-  @ApiProperty({ type: () => Object, oneOf: [
-    { type: 'string' },
-    { $ref: '#/components/schemas/GroupResponse' }
-  ]})
+  @ApiProperty({
+    type: () => Object,
+    oneOf: [{ type: 'string' }, { $ref: getSchemaPath(GroupResponse) }],
+  })
   group: string | GroupResponse;
 
-  @ApiProperty({ type: () => Object, oneOf: [
-    { type: 'string' },
-    { $ref: '#/components/schemas/SubjectResponse' }
-  ]})
+  @ApiProperty({
+    type: () => Object,
+    oneOf: [{ type: 'string' }, { $ref: getSchemaPath(SubjectResponse) }],
+  })
   subject: string | SubjectResponse;
 
   @ApiProperty()
@@ -78,6 +95,13 @@ export class BatchResponseDto {
 
   @ApiProperty()
   maxStudents: number;
+
+  @ApiProperty({
+    type: () => Object,
+    oneOf: [{ type: 'string' }, { $ref: getSchemaPath(UserResponse) }],
+    description: 'User who created the batch',
+  })
+  createdBy: string | UserResponse;
 
   @ApiProperty()
   createdAt: Date;

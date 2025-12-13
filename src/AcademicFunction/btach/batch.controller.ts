@@ -12,6 +12,7 @@ import {
   NotFoundException,
   UseGuards,
   UseFilters,
+  Req, // Add this import
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -29,6 +30,7 @@ import {
   ClassResponse,
   GroupResponse,
   SubjectResponse,
+  UserResponse,
 } from './dto/batch-response.dto';
 import { CreateBatchDto } from './dto/create-batch.dto';
 import { Batch } from './batch.schema';
@@ -39,7 +41,7 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { AuthExceptionFilter } from 'src/shared/filters/auth-exception.filter';
 import { UserRole } from 'src/shared/interfaces/user.interface';
 import { Roles } from 'src/auth/decorators/roles.decorator';
-
+import { Types } from 'mongoose';
 
 @ApiTags('batches')
 @ApiBearerAuth('JWT-auth')
@@ -107,8 +109,19 @@ export class BatchController {
       },
     },
   })
-  async create(@Body() createBatchDto: CreateBatchDto): Promise<BatchResponseDto> {
-    const batch = await this.batchService.create(createBatchDto);
+  async create(
+    @Body() createBatchDto: CreateBatchDto,
+    @Req() req: any, // Add request parameter to get user from JWT
+  ): Promise<BatchResponseDto> {
+    // Get user ID from JWT token (authenticated user)
+    const userId = req.user._id;
+    
+    console.log('Creating batch with user ID:', userId);
+    
+    const batch = await this.batchService.create({
+      ...createBatchDto,
+      createdBy: userId, // Use the authenticated user's ID
+    });
     return this.serializeBatch(batch);
   }
 
@@ -159,6 +172,7 @@ export class BatchController {
     enum: ['active', 'inactive', 'completed', 'upcoming'],
   })
   @ApiQuery({ name: 'isActive', required: false, type: Boolean })
+  @ApiQuery({ name: 'createdBy', required: false, type: String })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
   @ApiQuery({ name: 'sortBy', required: false, type: String, example: 'createdAt' })
@@ -170,9 +184,10 @@ export class BatchController {
   })
   async findAll(@Query() query: BatchQueryDto): Promise<BatchListResponseDto> {
     const result = await this.batchService.findAll(query);
+    console.log('Batches found:', JSON.stringify(result.data));
 
     const data = result.data.map((batch) => this.serializeBatch(batch));
-
+ console.log('Batches found data:', data);
     return {
       data,
       total: result.total,
@@ -588,105 +603,95 @@ export class BatchController {
   /**
    * Serialize Mongoose document to BatchResponseDto
    */
-  private serializeBatch(batch: any): BatchResponseDto {
-    // The service layer should already handle not found cases
-    // So batch should never be null here
-    if (!batch) {
-      // If somehow batch is null, throw an error
-      throw new NotFoundException('Batch not found');
-    }
-
-    // Convert Mongoose document to plain object
-    const plainBatch = batch.toObject ? batch.toObject() : batch;
-
-    // Calculate additional fields
-    const batchStartingDate = new Date(plainBatch.batchStartingDate);
-    const batchClosingDate = new Date(plainBatch.batchClosingDate);
-    const today = new Date();
-
-    const totalFee =
-      (plainBatch.admissionFee || 0) +
-      (plainBatch.tuitionFee || 0) +
-      (plainBatch.courseFee || 0);
-    const daysRemaining = Math.ceil(
-      (batchClosingDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-    );
-    const isActiveSession =
-      today >= batchStartingDate &&
-      today <= batchClosingDate &&
-      plainBatch.isActive;
-
-    // Handle populated fields - ensure they're always properly formatted
-    let className: string | ClassResponse;
-    if (plainBatch.className) {
-      if (typeof plainBatch.className === 'string') {
-        className = plainBatch.className;
-      } else if (plainBatch.className._id) {
-        className = {
-          _id: plainBatch.className._id.toString(),
-          classname: plainBatch.className.classname,
-        };
-      } else {
-        className = plainBatch.className.toString();
-      }
-    } else {
-      // If className is not populated, return the ObjectId as string
-      className = plainBatch.className?.toString() || '';
-    }
-
-    let group: string | GroupResponse;
-    if (plainBatch.group) {
-      if (typeof plainBatch.group === 'string') {
-        group = plainBatch.group;
-      } else if (plainBatch.group._id) {
-        group = {
-          _id: plainBatch.group._id.toString(),
-          groupName: plainBatch.group.groupName,
-        };
-      } else {
-        group = plainBatch.group.toString();
-      }
-    } else {
-      group = plainBatch.group?.toString() || '';
-    }
-
-    let subject: string | SubjectResponse;
-    if (plainBatch.subject) {
-      if (typeof plainBatch.subject === 'string') {
-        subject = plainBatch.subject;
-      } else if (plainBatch.subject._id) {
-        subject = {
-          _id: plainBatch.subject._id.toString(),
-          subjectName: plainBatch.subject.subjectName,
-        };
-      } else {
-        subject = plainBatch.subject.toString();
-      }
-    } else {
-      subject = plainBatch.subject?.toString() || '';
-    }
-
-    return {
-      _id: plainBatch._id.toString(),
-      batchName: plainBatch.batchName,
-      className,
-      group,
-      subject,
-      sessionYear: plainBatch.sessionYear || '',
-      batchStartingDate: plainBatch.batchStartingDate,
-      batchClosingDate: plainBatch.batchClosingDate,
-      admissionFee: plainBatch.admissionFee || 0,
-      tuitionFee: plainBatch.tuitionFee || 0,
-      courseFee: plainBatch.courseFee || 0,
-      status: plainBatch.status || 'active',
-      isActive: plainBatch.isActive !== undefined ? plainBatch.isActive : true,
-      description: plainBatch.description || '',
-      maxStudents: plainBatch.maxStudents || 50,
-      createdAt: plainBatch.createdAt,
-      updatedAt: plainBatch.updatedAt,
-      totalFee,
-      daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
-      isActiveSession,
-    };
+private serializeBatch(batch: any): BatchResponseDto {
+  if (!batch) {
+    throw new NotFoundException('Batch not found');
   }
+
+  console.log('Serializing batch:', batch);
+
+  // Convert with virtuals but clean up unwanted 'id' virtuals
+  const plainBatch = batch.toObject
+    ? batch.toObject({
+        virtuals: true,
+        transform: (doc, ret) => {
+          // Remove virtual 'id' from all populated documents
+          ['createdBy', 'className', 'group', 'subject'].forEach(field => {
+            if (ret[field] && ret[field].id) {
+              delete ret[field].id;
+            }
+          });
+          return ret;
+        },
+      })
+    : batch;
+
+  const today = new Date();
+  const start = new Date(plainBatch.batchStartingDate);
+  const end = new Date(plainBatch.batchClosingDate);
+
+  const totalFee = (plainBatch.admissionFee || 0) + (plainBatch.tuitionFee || 0) + (plainBatch.courseFee || 0);
+  const daysRemaining = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const isActiveSession = today >= start && today <= end && plainBatch.isActive;
+
+  // Helper to safely extract populated ref
+  const safeRef = (obj: any, idField: string, nameField: string) => {
+    if (!obj) return '';
+    if (typeof obj === 'string') return obj;
+    if (obj._id) {
+      return {
+        _id: obj._id.toString(),
+        [nameField]: obj[nameField] || '',
+      };
+    }
+    return obj.toString();
+  };
+
+  const className = safeRef(plainBatch.className, '_id', 'classname');
+  const group = safeRef(plainBatch.group, '_id', 'groupName');
+  const subject = safeRef(plainBatch.subject, '_id', 'subjectName');
+
+  let createdBy: string | UserResponse = '';
+
+  if (plainBatch.createdBy) {
+    if (typeof plainBatch.createdBy === 'object' && plainBatch.createdBy._id) {
+      const user = plainBatch.createdBy;
+      createdBy = {
+        _id: user._id.toString(), // Always use ._id — it's reliable
+        username: user.username || '',
+        email: user.email || '',
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+      };
+    } else {
+      // Fallback: just the raw ObjectId as string
+      createdBy = plainBatch.createdBy.toString();
+    }
+  }
+  // If createdBy is null → remains '' (user deleted)
+
+  return {
+    _id: plainBatch._id.toString(),
+    batchName: plainBatch.batchName,
+    className,
+    group,
+    subject,
+    sessionYear: plainBatch.sessionYear || '',
+    batchStartingDate: plainBatch.batchStartingDate,
+    batchClosingDate: plainBatch.batchClosingDate,
+    admissionFee: plainBatch.admissionFee || 0,
+    tuitionFee: plainBatch.tuitionFee || 0,
+    courseFee: plainBatch.courseFee || 0,
+    status: plainBatch.status || 'active',
+    isActive: plainBatch.isActive ?? true,
+    description: plainBatch.description || '',
+    maxStudents: plainBatch.maxStudents || 50,
+    createdBy,
+    createdAt: plainBatch.createdAt,
+    updatedAt: plainBatch.updatedAt,
+    totalFee,
+    daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
+    isActiveSession,
+  };
+}
 }

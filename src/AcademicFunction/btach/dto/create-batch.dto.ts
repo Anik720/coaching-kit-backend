@@ -79,4 +79,8 @@ export class CreateBatchDto {
   @Max(1000)
   @Type(() => Number)
   maxStudents?: number;
+
+  @IsMongoId()
+  @IsOptional() // Changed from @IsNotEmpty() to @IsOptional()
+  createdBy?: string; // Make it optional
 }

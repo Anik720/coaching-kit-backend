@@ -1,4 +1,11 @@
-import { IsOptional, IsString, IsNumber, IsEnum, IsBooleanString } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsEnum,
+  IsBooleanString,
+  IsMongoId,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class BatchQueryDto {
@@ -30,6 +37,11 @@ export class BatchQueryDto {
   @IsOptional()
   @IsBooleanString()
   isActive?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsMongoId()
+  createdBy?: string;
 
   @IsOptional()
   @Type(() => Number)
