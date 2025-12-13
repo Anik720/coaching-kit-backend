@@ -1,4 +1,3 @@
-// student/schemas/student.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { Batch } from 'src/AcademicFunction/btach/batch.schema';
@@ -102,7 +101,7 @@ export class Student {
   @Prop()
   photoUrl?: string;
 
-  @Prop()
+  @Prop({ required: true })
   fatherName: string;
 
   @Prop({ 
@@ -174,9 +173,26 @@ export class Student {
   @Prop()
   remarks?: string;
 
+  @Prop({ 
+    type: Types.ObjectId, 
+    ref: 'User', 
+    required: true,
+    index: true 
+  })
+  createdBy: Types.ObjectId;
+
+  @Prop({ 
+    type: Types.ObjectId, 
+    ref: 'User', 
+    default: null 
+  })
+  updatedBy?: Types.ObjectId | null;
+
   // Virtual populate for referencing
   classDetails?: Class;
   batchDetails?: Batch;
+  createdByUser?: any;
+  updatedByUser?: any;
 }
 
 export const StudentSchema = SchemaFactory.createForClass(Student);
@@ -187,6 +203,8 @@ StudentSchema.index({ class: 1, batch: 1 });
 StudentSchema.index({ nameEnglish: 1 });
 StudentSchema.index({ fatherMobileNumber: 1 });
 StudentSchema.index({ status: 1, isActive: 1 });
+StudentSchema.index({ createdBy: 1 });
+StudentSchema.index({ createdBy: 1, createdAt: -1 });
 
 // Virtual population for class
 StudentSchema.virtual('classDetails', {
@@ -204,7 +222,23 @@ StudentSchema.virtual('batchDetails', {
   justOne: true,
 });
 
-// PRE-VALIDATE middleware runs BEFORE Mongoose validation — fix for required fields generation
+// Virtual population for createdBy
+StudentSchema.virtual('createdByUser', {
+  ref: 'User',
+  localField: 'createdBy',
+  foreignField: '_id',
+  justOne: true,
+});
+
+// Virtual population for updatedBy
+StudentSchema.virtual('updatedByUser', {
+  ref: 'User',
+  localField: 'updatedBy',
+  foreignField: '_id',
+  justOne: true,
+});
+
+// PRE-VALIDATE middleware runs BEFORE Mongoose validation
 StudentSchema.pre('validate', function (next) {
   const student = this as StudentDocument;
 

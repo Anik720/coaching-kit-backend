@@ -11,12 +11,15 @@ export class CreateStudentDto {
   registrationId: string;
 
   @IsMongoId()
+  @IsNotEmpty()
   class: string;
 
   @IsMongoId()
+  @IsNotEmpty()
   batch: string;
 
   @IsString()
+  @IsNotEmpty()
   nameEnglish: string;
 
   @IsOptional()
@@ -25,9 +28,11 @@ export class CreateStudentDto {
 
   @Type(() => Date)
   @IsDate()
+  @IsNotEmpty()
   dateOfBirth: Date;
 
   @IsEnum(Gender)
+  @IsNotEmpty()
   gender: Gender;
 
   @IsOptional()
@@ -43,9 +48,11 @@ export class CreateStudentDto {
   wardNumber?: string;
 
   @IsString()
+  @IsNotEmpty()
   presentAddress: string;
 
   @IsString()
+  @IsNotEmpty()
   permanentAddress: string;
 
   @IsOptional()
@@ -53,9 +60,11 @@ export class CreateStudentDto {
   photoUrl?: string;
 
   @IsString()
+  @IsNotEmpty()
   fatherName: string;
 
   @Matches(/^\d{10,15}$/)
+  @IsNotEmpty()
   fatherMobileNumber: string;
 
   @IsOptional()
@@ -67,6 +76,7 @@ export class CreateStudentDto {
   motherMobileNumber?: string;
 
   @IsEnum(AdmissionType)
+  @IsNotEmpty()
   admissionType: AdmissionType;
 
   @IsOptional()
