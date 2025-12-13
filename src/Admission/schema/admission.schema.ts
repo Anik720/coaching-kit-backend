@@ -1,5 +1,3 @@
-// admission/schemas/admission.schema.ts
-
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
@@ -59,18 +57,18 @@ export interface AdmissionBatch {
 })
 export class Admission {
   @Prop({
-    
+    required: true,
     unique: true,
     index: true,
-    default: () => Math.floor(100000 + Math.random() * 900000).toString()
+    trim: true
   })
   registrationId: string;
 
-  @Prop({  trim: true })
+  @Prop({ required: true, trim: true })
   name: string;
 
-  @Prop({ trim: true })
-  nameNative?: string;
+  @Prop({ required: true, trim: true })
+  instituteName: string;
 
   @Prop({
     type: String,
@@ -78,15 +76,6 @@ export class Admission {
     required: true
   })
   studentGender: Gender;
-
-  @Prop({ type: Date, required: true })
-  studentDateOfBirth: Date;
-
-  @Prop({ required: true })
-  presentAddress: string;
-
-  @Prop({ required: true })
-  permanentAddress: string;
 
   @Prop({
     type: String,
@@ -96,31 +85,28 @@ export class Admission {
   religion: Religion;
 
   @Prop({
-    
+    required: true,
     validate: {
       validator: (v: string) => /^01[3-9]\d{8}$/.test(v),
       message: 'Please provide a valid Bangladeshi mobile number'
     }
   })
-  whatsappMobile: string;
+  guardianMobileNumber: string;
 
-  @Prop({
-    
-    validate: {
-      validator: (v: string) => /^01[3-9]\d{8}$/.test(v),
-      message: 'Please provide a valid Bangladeshi mobile number'
-    }
-  })
-  studentMobileNumber: string;
+  @Prop({ type: Date, default: Date.now })
+  admissionDate: Date;
 
-  @Prop({  trim: true })
-  instituteName: string;
+  @Prop({ trim: true })
+  nameNative?: string;
 
-  @Prop({  trim: true })
-  fathersName: string;
+  @Prop({ type: Date })
+  studentDateOfBirth?: Date;
 
-  @Prop({  trim: true })
-  mothersName: string;
+  @Prop()
+  presentAddress?: string;
+
+  @Prop()
+  permanentAddress?: string;
 
   @Prop({
     validate: {
@@ -128,7 +114,21 @@ export class Admission {
       message: 'Please provide a valid Bangladeshi mobile number'
     }
   })
-  guardianMobileNumber?: string;
+  whatsappMobile?: string;
+
+  @Prop({
+    validate: {
+      validator: (v: string) => /^01[3-9]\d{8}$/.test(v),
+      message: 'Please provide a valid Bangladeshi mobile number'
+    }
+  })
+  studentMobileNumber?: string;
+
+  @Prop({ trim: true })
+  fathersName?: string;
+
+  @Prop({ trim: true })
+  mothersName?: string;
 
   @Prop({
     validate: {
@@ -156,9 +156,6 @@ export class Admission {
 
   @Prop({ trim: true })
   referBy?: string;
-
-  @Prop({ type: Date, default: Date.now })
-  admissionDate: Date;
 
   @Prop({
     type: [{
@@ -216,8 +213,8 @@ export class Admission {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   approvedBy?: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User' })
-  createdBy?: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  createdBy: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   updatedBy?: Types.ObjectId;
@@ -227,6 +224,8 @@ export const AdmissionSchema = SchemaFactory.createForClass(Admission);
 
 // Virtual for age calculation
 AdmissionSchema.virtual('age').get(function(this: AdmissionDocument) {
+  if (!this.studentDateOfBirth) return undefined;
+  
   const today = new Date();
   const birthDate = new Date(this.studentDateOfBirth);
   let age = today.getFullYear() - birthDate.getFullYear();
@@ -243,23 +242,16 @@ AdmissionSchema.virtual('age').get(function(this: AdmissionDocument) {
 AdmissionSchema.methods.checkCompletion = function(this: AdmissionDocument): boolean {
   const requiredFields = [
     'name',
-    'studentGender',
-    'studentDateOfBirth',
-    'presentAddress',
-    'permanentAddress',
-    'religion',
-    'whatsappMobile',
-    'studentMobileNumber',
     'instituteName',
-    'fathersName',
-    'mothersName',
-    'admissionType'
+    'studentGender',
+    'religion',
+    'guardianMobileNumber'
   ];
   
   return requiredFields.every(field => {
     const value = this[field as keyof AdmissionDocument];
     return value !== undefined && value !== null && value !== '';
-  }) && this.batches && this.batches.length > 0;
+  });
 };
 
 // Pre-save middleware to update calculated fields
@@ -321,9 +313,11 @@ AdmissionSchema.pre('findOneAndUpdate', function(next) {
 // Indexes for better query performance
 AdmissionSchema.index({ registrationId: 1 });
 AdmissionSchema.index({ name: 1 });
-AdmissionSchema.index({ studentMobileNumber: 1 });
+AdmissionSchema.index({ guardianMobileNumber: 1 });
 AdmissionSchema.index({ whatsappMobile: 1 });
+AdmissionSchema.index({ studentMobileNumber: 1 });
 AdmissionSchema.index({ status: 1, isCompleted: 1 });
 AdmissionSchema.index({ createdAt: -1 });
 AdmissionSchema.index({ admissionDate: -1 });
-AdmissionSchema.index({ fathersName: 'text', mothersName: 'text', name: 'text' });
+AdmissionSchema.index({ fathersName: 'text', mothersName: 'text', name: 'text', instituteName: 'text' });
+AdmissionSchema.index({ createdBy: 1 });
