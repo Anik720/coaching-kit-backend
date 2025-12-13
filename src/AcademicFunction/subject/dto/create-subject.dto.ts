@@ -1,6 +1,4 @@
-import { IsNotEmpty, IsString } from 'class-validator';
-
-// Note: 'Trim' isn't a standard decorator; if you want trimming, add a transform in pipe or use class-transformer
+import { IsNotEmpty, IsString, IsOptional, IsBoolean } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateSubjectDto {
@@ -8,4 +6,12 @@ export class CreateSubjectDto {
   @IsString()
   @IsNotEmpty()
   subjectName: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
 }
