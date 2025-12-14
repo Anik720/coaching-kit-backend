@@ -4,6 +4,7 @@ export enum UserRole {
   SUPER_ADMIN = 'super_admin',
   USER_ADMIN = 'user_admin',
   STAFF = 'staff',
+  STUDENT = 'student', 
 }
 
 export interface IUser {
