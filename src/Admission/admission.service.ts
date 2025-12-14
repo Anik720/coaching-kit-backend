@@ -9,7 +9,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateAdmissionDto } from './dto/create-admission.dto';
 import { UpdateAdmissionDto } from './dto/update-admission.dto';
-import { Admission, AdmissionDocument, AdmissionStatus, Gender, Religion } from './schema/admission.schema';
+import { Admission, AdmissionDocument, AdmissionStatus, Gender, Religion, AdmissionBatch } from './schema/admission.schema';
 
 @Injectable()
 export class AdmissionService {
@@ -34,7 +34,7 @@ export class AdmissionService {
   }
 
   // Create new admission with client-provided registrationId
-  async create(createAdmissionDto: CreateAdmissionDto): Promise<AdmissionDocument> {
+  async create(createAdmissionDto: CreateAdmissionDto, userId: string): Promise<AdmissionDocument> {
     try {
       console.log('Raw DTO received:', JSON.stringify(createAdmissionDto, null, 2));
 
@@ -43,9 +43,14 @@ export class AdmissionService {
         throw new BadRequestException('Registration ID is required');
       }
 
+      // Validate user ID
+      if (!Types.ObjectId.isValid(userId)) {
+        throw new BadRequestException('Invalid user ID');
+      }
+
       // Check if registration ID already exists
       const existing = await this.admissionModel.findOne({ 
-        registrationId: createAdmissionDto.registrationId 
+        registrationId: createAdmissionDto.registrationId.trim()
       });
       
       if (existing) {
@@ -53,7 +58,9 @@ export class AdmissionService {
       }
 
       // Parse dates
-      const studentDateOfBirth = this.parseDate(createAdmissionDto.studentDateOfBirth);
+      const studentDateOfBirth = createAdmissionDto.studentDateOfBirth 
+        ? this.parseDate(createAdmissionDto.studentDateOfBirth)
+        : undefined;
       
       let admissionDate = new Date();
       if (createAdmissionDto.admissionDate) {
@@ -65,82 +72,125 @@ export class AdmissionService {
 
       // Parse batch data
       let batchData = createAdmissionDto.batch_with_subjects;
-      if (typeof batchData === 'string') {
-        try {
-          batchData = JSON.parse(batchData);
-        } catch (error) {
-          console.log('Failed to parse batch data:', batchData);
-          // Try to fix common JSON issues
+      let batches: AdmissionBatch[] = [];
+      
+      if (batchData) {
+        if (typeof batchData === 'string') {
           try {
-            // Handle the nested structure from your payload
-            const parsed = JSON.parse(batchData);
-            if (parsed['batch-index-0']) {
-              batchData = [{
-                batchName: parsed['batch-index-0'].batch_name,
-                batchId: parsed['batch-index-0'].batch_id,
-                subjects: parsed['batch-index-0'].subjects?.map((s: any) => ({
-                  subjectName: s.subject_name,
-                  subjectId: s.subject_id
-                })) || [],
-                admissionFee: parsed['batch-index-0'].admission_fee,
-                tuitionFee: parsed['batch-index-0'].tution_fee,
-                courseFee: parsed['batch-index-0'].course_fee
-              }];
+            batchData = JSON.parse(batchData);
+          } catch (error) {
+            console.log('Failed to parse batch data:', batchData);
+            // Try to fix common JSON issues
+            try {
+              // Handle the nested structure from your payload
+              const parsed = JSON.parse(batchData);
+              if (parsed['batch-index-0']) {
+                batchData = [{
+                  batchName: parsed['batch-index-0'].batch_name,
+                  batchId: parsed['batch-index-0'].batch_id,
+                  subjects: parsed['batch-index-0'].subjects?.map((s: any) => ({
+                    subjectName: s.subject_name,
+                    subjectId: s.subject_id
+                  })) || [],
+                  admissionFee: parsed['batch-index-0'].admission_fee,
+                  tuitionFee: parsed['batch-index-0'].tution_fee,
+                  courseFee: parsed['batch-index-0'].course_fee
+                }];
+              }
+            } catch (e) {
+              console.error('Failed to parse nested batch data:', e);
+              batchData = null;
             }
-          } catch (e) {
-            console.error('Failed to parse nested batch data:', e);
-            batchData = null;
           }
+        }
+
+        if (batchData && Array.isArray(batchData)) {
+          batches = batchData.map((batch: any) => ({
+            batch: new Types.ObjectId(),
+            batchName: batch.batchName || batch.batch_name || '',
+            batchId: Number(batch.batchId || batch.batch_id) || 0,
+            subjects: Array.isArray(batch.subjects) ? batch.subjects.map((subject: any) => ({
+              subjectName: subject.subjectName || subject.subject_name || '',
+              subjectId: Number(subject.subjectId || subject.subject_id) || 0,
+            })) : [],
+            admissionFee: Number(batch.admissionFee || batch.admission_fee) || 0,
+            tuitionFee: Number(batch.tuitionFee || batch.tution_fee) || 0,
+            courseFee: Number(batch.courseFee || batch.course_fee) || 0,
+          })) as AdmissionBatch[];
         }
       }
 
-      // Prepare admission data with safe access
+      // Prepare admission data
       const admissionData: Partial<Admission> = {
-        registrationId: createAdmissionDto.registrationId?.toString()?.trim() || '',
-        name: createAdmissionDto.name?.trim() || '',
-        nameNative: createAdmissionDto.nameNative?.trim(),
+        registrationId: createAdmissionDto.registrationId.trim(),
+        name: createAdmissionDto.name.trim(),
+        instituteName: createAdmissionDto.instituteName.trim(),
         studentGender: createAdmissionDto.studentGender as Gender,
-        studentDateOfBirth: studentDateOfBirth || new Date(), // Default to current date if not provided
-        presentAddress: createAdmissionDto.presentAddress?.trim() || '',
-        permanentAddress: createAdmissionDto.permanentAddress?.trim() || '',
         religion: createAdmissionDto.religion as Religion,
-        whatsappMobile: createAdmissionDto.whatsappMobile?.toString()?.trim() || '',
-        studentMobileNumber: createAdmissionDto.studentMobileNumber?.toString()?.trim() || '',
-        instituteName: createAdmissionDto.instituteName?.trim() || '',
-        fathersName: createAdmissionDto.fathersName?.trim() || '',
-        mothersName: createAdmissionDto.mothersName?.trim() || '',
-        guardianMobileNumber: createAdmissionDto.guardianMobileNumber?.toString()?.trim(),
-        motherMobileNumber: createAdmissionDto.motherMobileNumber?.toString()?.trim(),
-        admissionType: createAdmissionDto.admissionType,
-        courseFee: Number(createAdmissionDto.courseFee) || 0,
-        admissionFee: Number(createAdmissionDto.admissionFee) || 0,
-        tuitionFee: Number(createAdmissionDto.tuitionFee) || 0,
-        referBy: createAdmissionDto.referBy?.trim(),
+        guardianMobileNumber: createAdmissionDto.guardianMobileNumber.trim(),
         admissionDate: admissionDate,
         status: AdmissionStatus.PENDING,
         isCompleted: false,
+        createdBy: new Types.ObjectId(userId),
       };
 
-      // Convert batch_with_subjects to batches format
-      if (batchData && Array.isArray(batchData)) {
-        admissionData.batches = batchData.map((batch: any) => ({
-          batch: new Types.ObjectId(),
-          batchName: batch.batchName || batch.batch_name || '',
-          batchId: Number(batch.batchId || batch.batch_id) || 0,
-          subjects: Array.isArray(batch.subjects) ? batch.subjects.map((subject: any) => ({
-            subjectName: subject.subjectName || subject.subject_name || '',
-            subjectId: Number(subject.subjectId || subject.subject_id) || 0,
-          })) : [],
-          admissionFee: Number(batch.admissionFee || batch.admission_fee) || 0,
-          tuitionFee: Number(batch.tuitionFee || batch.tution_fee) || 0,
-          courseFee: Number(batch.courseFee || batch.course_fee) || 0,
-        }));
+      // Add optional fields if provided
+      if (createAdmissionDto.nameNative) {
+        admissionData.nameNative = createAdmissionDto.nameNative.trim();
+      }
+      if (studentDateOfBirth) {
+        admissionData.studentDateOfBirth = studentDateOfBirth;
+      }
+      if (createAdmissionDto.presentAddress) {
+        admissionData.presentAddress = createAdmissionDto.presentAddress.trim();
+      }
+      if (createAdmissionDto.permanentAddress) {
+        admissionData.permanentAddress = createAdmissionDto.permanentAddress.trim();
+      }
+      if (createAdmissionDto.whatsappMobile) {
+        admissionData.whatsappMobile = createAdmissionDto.whatsappMobile.trim();
+      }
+      if (createAdmissionDto.studentMobileNumber) {
+        admissionData.studentMobileNumber = createAdmissionDto.studentMobileNumber.trim();
+      }
+      if (createAdmissionDto.fathersName) {
+        admissionData.fathersName = createAdmissionDto.fathersName.trim();
+      }
+      if (createAdmissionDto.mothersName) {
+        admissionData.mothersName = createAdmissionDto.mothersName.trim();
+      }
+      if (createAdmissionDto.motherMobileNumber) {
+        admissionData.motherMobileNumber = createAdmissionDto.motherMobileNumber.trim();
+      }
+      if (createAdmissionDto.admissionType) {
+        admissionData.admissionType = createAdmissionDto.admissionType;
+      }
+      if (createAdmissionDto.courseFee !== undefined) {
+        admissionData.courseFee = Number(createAdmissionDto.courseFee);
+      }
+      if (createAdmissionDto.admissionFee !== undefined) {
+        admissionData.admissionFee = Number(createAdmissionDto.admissionFee);
+      }
+      if (createAdmissionDto.tuitionFee !== undefined) {
+        admissionData.tuitionFee = Number(createAdmissionDto.tuitionFee);
+      }
+      if (createAdmissionDto.referBy) {
+        admissionData.referBy = createAdmissionDto.referBy.trim();
+      }
+      if (batches.length > 0) {
+        admissionData.batches = batches;
       }
 
       console.log('Final admission data:', admissionData);
 
       const createdAdmission = new this.admissionModel(admissionData);
       const savedAdmission = await createdAdmission.save();
+      
+      // Populate user fields
+      await savedAdmission.populate([
+        { path: 'createdBy', select: 'email username role' },
+        { path: 'updatedBy', select: 'email username role' }
+      ]);
       
       return savedAdmission;
     } catch (error: any) {
@@ -158,7 +208,8 @@ export class AdmissionService {
   // Update admission by registration ID
   async update(
     registrationId: string, 
-    updateAdmissionDto: UpdateAdmissionDto
+    updateAdmissionDto: UpdateAdmissionDto,
+    userId?: string
   ): Promise<AdmissionDocument> {
     try {
       const admission = await this.admissionModel.findOne({ registrationId });
@@ -168,6 +219,14 @@ export class AdmissionService {
       }
 
       const updateData: any = { ...updateAdmissionDto };
+
+      // Add updatedBy if userId is provided
+      if (userId) {
+        if (!Types.ObjectId.isValid(userId)) {
+          throw new BadRequestException('Invalid user ID');
+        }
+        updateData.updatedBy = new Types.ObjectId(userId);
+      }
 
       // Parse dates if provided
       if (updateData.studentDateOfBirth) {
@@ -200,7 +259,7 @@ export class AdmissionService {
             admissionFee: Number(batch.admissionFee || batch.admission_fee) || 0,
             tuitionFee: Number(batch.tuitionFee || batch.tution_fee) || 0,
             courseFee: Number(batch.courseFee || batch.course_fee) || 0,
-          }));
+          })) as AdmissionBatch[];
         }
         
         delete updateData.batch_with_subjects;
@@ -214,6 +273,9 @@ export class AdmissionService {
 
       if (updateData.status === AdmissionStatus.APPROVED && admission.status !== AdmissionStatus.APPROVED) {
         updateData.approvedAt = new Date();
+        if (userId) {
+          updateData.approvedBy = new Types.ObjectId(userId);
+        }
       }
 
       // Update numeric fields
@@ -225,6 +287,13 @@ export class AdmissionService {
       // Update admission
       Object.assign(admission, updateData);
       await admission.save();
+
+      // Populate user fields
+      await admission.populate([
+        { path: 'createdBy', select: 'email username role' },
+        { path: 'updatedBy', select: 'email username role' },
+        { path: 'approvedBy', select: 'email username role' }
+      ]);
 
       return admission;
     } catch (error: any) {
@@ -241,9 +310,11 @@ export class AdmissionService {
       throw new BadRequestException('Registration ID is required');
     }
 
-    const admission = await this.admissionModel.findOne({ 
-      registrationId: registrationId.trim() 
-    });
+    const admission = await this.admissionModel
+      .findOne({ registrationId: registrationId.trim() })
+      .populate('createdBy', 'email username role')
+      .populate('updatedBy', 'email username role')
+      .populate('approvedBy', 'email username role');
     
     if (!admission) {
       throw new NotFoundException(`Admission with registration ID ${registrationId} not found`);
@@ -261,13 +332,14 @@ export class AdmissionService {
       startDate?: Date;
       endDate?: Date;
       search?: string;
+      createdBy?: string;
     } = {},
     pagination: {
       page?: number;
       limit?: number;
     } = {}
   ): Promise<{ admissions: AdmissionDocument[]; total: number; page: number; limit: number }> {
-    const { status, isCompleted, admissionType, startDate, endDate, search } = filters;
+    const { status, isCompleted, admissionType, startDate, endDate, search, createdBy } = filters;
     const { page = 1, limit = 10 } = pagination;
     
     const query: any = {};
@@ -284,6 +356,13 @@ export class AdmissionService {
       query.admissionType = admissionType;
     }
 
+    if (createdBy) {
+      if (!Types.ObjectId.isValid(createdBy)) {
+        throw new BadRequestException('Invalid createdBy user ID');
+      }
+      query.createdBy = new Types.ObjectId(createdBy);
+    }
+
     if (startDate || endDate) {
       query.admissionDate = {};
       if (startDate) {
@@ -298,6 +377,8 @@ export class AdmissionService {
       query.$or = [
         { registrationId: { $regex: search, $options: 'i' } },
         { name: { $regex: search, $options: 'i' } },
+        { instituteName: { $regex: search, $options: 'i' } },
+        { guardianMobileNumber: { $regex: search, $options: 'i' } },
         { whatsappMobile: { $regex: search, $options: 'i' } },
         { studentMobileNumber: { $regex: search, $options: 'i' } },
         { fathersName: { $regex: search, $options: 'i' } },
@@ -309,6 +390,8 @@ export class AdmissionService {
     const [admissions, total] = await Promise.all([
       this.admissionModel
         .find(query)
+        .populate('createdBy', 'email username role')
+        .populate('updatedBy', 'email username role')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -340,7 +423,12 @@ export class AdmissionService {
   }
 
   // Get admission statistics
-  async getStatistics(): Promise<any> {
+  async getStatistics(userId?: string): Promise<any> {
+    const query: any = {};
+    if (userId && Types.ObjectId.isValid(userId)) {
+      query.createdBy = new Types.ObjectId(userId);
+    }
+
     const [
       total,
       pending,
@@ -350,18 +438,20 @@ export class AdmissionService {
       todayAdmissions,
       thisMonthAdmissions,
     ] = await Promise.all([
-      this.admissionModel.countDocuments(),
-      this.admissionModel.countDocuments({ status: AdmissionStatus.PENDING }),
-      this.admissionModel.countDocuments({ status: AdmissionStatus.COMPLETED }),
-      this.admissionModel.countDocuments({ status: AdmissionStatus.APPROVED }),
-      this.admissionModel.countDocuments({ status: AdmissionStatus.REJECTED }),
+      this.admissionModel.countDocuments(query),
+      this.admissionModel.countDocuments({ ...query, status: AdmissionStatus.PENDING }),
+      this.admissionModel.countDocuments({ ...query, status: AdmissionStatus.COMPLETED }),
+      this.admissionModel.countDocuments({ ...query, status: AdmissionStatus.APPROVED }),
+      this.admissionModel.countDocuments({ ...query, status: AdmissionStatus.REJECTED }),
       this.admissionModel.countDocuments({
+        ...query,
         createdAt: {
           $gte: new Date(new Date().setHours(0, 0, 0, 0)),
           $lt: new Date(new Date().setHours(23, 59, 59, 999))
         }
       }),
       this.admissionModel.countDocuments({
+        ...query,
         createdAt: {
           $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
           $lt: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
@@ -370,6 +460,7 @@ export class AdmissionService {
     ]);
 
     const totalRevenue = await this.admissionModel.aggregate([
+      { $match: query },
       { $group: { _id: null, total: { $sum: '$paidAmount' } } }
     ]);
 
@@ -391,17 +482,71 @@ export class AdmissionService {
       throw new BadRequestException('Valid batch ID is required');
     }
 
-    const admissions = await this.admissionModel.find({
-      'batches.batchId': batchId
-    }).exec();
+    const admissions = await this.admissionModel
+      .find({
+        'batches.batchId': batchId
+      })
+      .populate('createdBy', 'email username role')
+      .populate('updatedBy', 'email username role')
+      .exec();
 
     return admissions;
   }
 
   // Get pending admissions count
-  async getPendingCount(): Promise<number> {
-    return this.admissionModel.countDocuments({ 
-      status: AdmissionStatus.PENDING 
-    }).exec();
+  async getPendingCount(userId?: string): Promise<number> {
+    const query: any = { status: AdmissionStatus.PENDING };
+    if (userId && Types.ObjectId.isValid(userId)) {
+      query.createdBy = new Types.ObjectId(userId);
+    }
+    
+    return this.admissionModel.countDocuments(query).exec();
+  }
+
+  // Get admissions created by specific user
+  async getMyAdmissions(userId: string, filters?: any, pagination?: any) {
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+
+    const query: any = { createdBy: new Types.ObjectId(userId) };
+    
+    if (filters?.status) {
+      query.status = filters.status;
+    }
+    if (filters?.isCompleted !== undefined) {
+      query.isCompleted = filters.isCompleted;
+    }
+    if (filters?.search) {
+      query.$or = [
+        { registrationId: { $regex: filters.search, $options: 'i' } },
+        { name: { $regex: filters.search, $options: 'i' } },
+        { instituteName: { $regex: filters.search, $options: 'i' } },
+        { guardianMobileNumber: { $regex: filters.search, $options: 'i' } },
+      ];
+    }
+
+    const { page = 1, limit = 10 } = pagination || {};
+    const skip = (page - 1) * limit;
+
+    const [admissions, total] = await Promise.all([
+      this.admissionModel
+        .find(query)
+        .populate('createdBy', 'email username role')
+        .populate('updatedBy', 'email username role')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.admissionModel.countDocuments(query).exec()
+    ]);
+
+    return {
+      admissions,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 }

@@ -1,8 +1,6 @@
-// src/suggestion-complaint/dtos/create-feedback.dto.ts
-import { IsEnum, IsNotEmpty, IsOptional, IsString, Length } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, Length, IsBoolean } from 'class-validator';
 import { FeedbackType } from '../enums/feedback-type.enum';
-// Reuse small inline DTO in controller or define:
+
 export class ReplyDto {
   @IsString()
   @Length(1, 2000)
@@ -11,6 +9,7 @@ export class ReplyDto {
 
 export class CreateFeedbackDto {
   @IsEnum(FeedbackType)
+  @IsNotEmpty()
   type: FeedbackType;
 
   @IsOptional()
@@ -23,7 +22,6 @@ export class CreateFeedbackDto {
   @Length(3, 5000)
   message: string;
 
-  // optional when anonymous submission
   @IsOptional()
   @IsString()
   @Length(2, 100)
@@ -34,8 +32,8 @@ export class CreateFeedbackDto {
   @Length(5, 254)
   userEmail?: string;
 
-  // client may set true to request anonymity; server will respect only if no authenticated user
   @IsOptional()
+  @IsBoolean()
   isAnonymous?: boolean;
 }
 

@@ -16,6 +16,7 @@ import {
   UseFilters,
   HttpStatus,
   HttpCode,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { 
@@ -36,6 +37,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../shared/interfaces/user.interface';
 import { AuthExceptionFilter } from '../shared/filters/auth-exception.filter';
+import type { Request } from 'express';
 
 @ApiTags('admissions')
 @ApiBearerAuth('JWT-auth')
@@ -46,7 +48,7 @@ export class AdmissionController {
   constructor(private readonly admissionService: AdmissionService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.STAFF)
   @ApiOperation({ summary: 'Create new admission (can be incomplete)' })
   @ApiResponse({ 
     status: HttpStatus.CREATED, 
@@ -59,7 +61,7 @@ export class AdmissionController {
     schema: {
       example: {
         statusCode: 400,
-        message: ['registrationId is required', 'Invalid date format'],
+        message: ['registrationId is required', 'Invalid mobile number'],
         error: 'Bad Request',
       },
     },
@@ -96,8 +98,8 @@ export class AdmissionController {
         statusCode: 403,
         message: 'Insufficient permissions',
         code: 'INSUFFICIENT_PERMISSIONS',
-        requiredRoles: ['super_admin', 'user_admin'],
-        userRole: 'staff',
+        requiredRoles: ['super_admin', 'user_admin', 'staff'],
+        userRole: null,
         timestamp: '2023-12-06T10:30:00.000Z',
         path: '/admissions',
       },
@@ -107,27 +109,33 @@ export class AdmissionController {
   @UseInterceptors(FileInterceptor('photo'))
   async create(
     @Body() createAdmissionDto: CreateAdmissionDto,
+    @Req() req: Request,
     @UploadedFile() photo?: any,
   ): Promise<AdmissionResponseDto> {
+    const user = req.user as any;
+    if (!user || !user._id) {
+      throw new Error('User authentication failed - no user ID found');
+    }
+
     // Handle photo upload if provided
     if (photo) {
       // createAdmissionDto.photoUrl = await this.uploadPhoto(photo);
       // createAdmissionDto.photoPath = photo.path;
     }
 
-    console.log('Received DTO:', createAdmissionDto); // Debug log
+    console.log('Received DTO:', createAdmissionDto);
     
-    const admission = await this.admissionService.create(createAdmissionDto);
+    const admission = await this.admissionService.create(createAdmissionDto, user._id);
     return this.mapToResponseDto(admission);
   }
 
   @Put(':registrationId')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.STAFF)
   @ApiOperation({ summary: 'Update admission by registration ID' })
   @ApiParam({
     name: 'registrationId',
     description: 'Registration ID',
-    example: 'REG20231206001',
+    example: 'REG001',
   })
   @ApiResponse({ 
     status: HttpStatus.OK, 
@@ -140,7 +148,7 @@ export class AdmissionController {
     schema: {
       example: {
         statusCode: 404,
-        message: 'Admission with registration ID REG20231206001 not found',
+        message: 'Admission with registration ID REG001 not found',
         error: 'Not Found',
       },
     },
@@ -176,79 +184,7 @@ export class AdmissionController {
         message: 'Invalid authentication token',
         code: 'INVALID_TOKEN',
         timestamp: '2023-12-06T10:30:00.000Z',
-        path: '/admissions/REG20231206001',
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Insufficient permissions',
-    schema: {
-      example: {
-        statusCode: 403,
-        message: 'Insufficient permissions',
-        code: 'INSUFFICIENT_PERMISSIONS',
-        requiredRoles: ['super_admin', 'user_admin'],
-        userRole: 'staff',
-        timestamp: '2023-12-06T10:30:00.000Z',
-        path: '/admissions/REG20231206001',
-      },
-    },
-  })
-  @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('photo'))
-  async update(
-    @Param('registrationId') registrationId: string,
-    @Body() updateAdmissionDto: UpdateAdmissionDto,
-    @UploadedFile() photo?: any,
-  ): Promise<AdmissionResponseDto> {
-    // Handle photo upload if provided
-    if (photo) {
-      // updateAdmissionDto.photoUrl = await this.uploadPhoto(photo);
-      // updateAdmissionDto.photoPath = photo.path;
-    }
-
-    const admission = await this.admissionService.update(
-      registrationId, 
-      updateAdmissionDto
-    );
-    return this.mapToResponseDto(admission);
-  }
-
-  @Get(':registrationId')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.STAFF)
-  @ApiOperation({ summary: 'Get admission by registration ID' })
-  @ApiParam({
-    name: 'registrationId',
-    description: 'Registration ID',
-    example: 'REG20231206001',
-  })
-  @ApiResponse({ 
-    status: HttpStatus.OK, 
-    description: 'Admission details',
-    type: AdmissionResponseDto,
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'Admission not found',
-    schema: {
-      example: {
-        statusCode: 404,
-        message: 'Admission with registration ID REG20231206001 not found',
-        error: 'Not Found',
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Unauthorized',
-    schema: {
-      example: {
-        statusCode: 401,
-        message: 'Invalid authentication token',
-        code: 'INVALID_TOKEN',
-        timestamp: '2023-12-06T10:30:00.000Z',
-        path: '/admissions/REG20231206001',
+        path: '/admissions/REG001',
       },
     },
   })
@@ -263,7 +199,86 @@ export class AdmissionController {
         requiredRoles: ['super_admin', 'user_admin', 'staff'],
         userRole: null,
         timestamp: '2023-12-06T10:30:00.000Z',
-        path: '/admissions/REG20231206001',
+        path: '/admissions/REG001',
+      },
+    },
+  })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('photo'))
+  async update(
+    @Param('registrationId') registrationId: string,
+    @Body() updateAdmissionDto: UpdateAdmissionDto,
+    @Req() req: Request,
+    @UploadedFile() photo?: any,
+  ): Promise<AdmissionResponseDto> {
+    const user = req.user as any;
+    if (!user || !user._id) {
+      throw new Error('User authentication failed - no user ID found');
+    }
+
+    // Handle photo upload if provided
+    if (photo) {
+      // updateAdmissionDto.photoUrl = await this.uploadPhoto(photo);
+      // updateAdmissionDto.photoPath = photo.path;
+    }
+
+    const admission = await this.admissionService.update(
+      registrationId, 
+      updateAdmissionDto,
+      user._id
+    );
+    return this.mapToResponseDto(admission);
+  }
+
+  @Get(':registrationId')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.STAFF)
+  @ApiOperation({ summary: 'Get admission by registration ID' })
+  @ApiParam({
+    name: 'registrationId',
+    description: 'Registration ID',
+    example: 'REG001',
+  })
+  @ApiResponse({ 
+    status: HttpStatus.OK, 
+    description: 'Admission details',
+    type: AdmissionResponseDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Admission not found',
+    schema: {
+      example: {
+        statusCode: 404,
+        message: 'Admission with registration ID REG001 not found',
+        error: 'Not Found',
+      },
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Unauthorized',
+    schema: {
+      example: {
+        statusCode: 401,
+        message: 'Invalid authentication token',
+        code: 'INVALID_TOKEN',
+        timestamp: '2023-12-06T10:30:00.000Z',
+        path: '/admissions/REG001',
+      },
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Insufficient permissions',
+    schema: {
+      example: {
+        statusCode: 403,
+        message: 'Insufficient permissions',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        requiredRoles: ['super_admin', 'user_admin', 'staff'],
+        userRole: null,
+        timestamp: '2023-12-06T10:30:00.000Z',
+        path: '/admissions/REG001',
       },
     },
   })
@@ -278,7 +293,7 @@ export class AdmissionController {
   @ApiQuery({
     name: 'status',
     required: false,
-    enum: ['pending', 'completed', 'approved', 'rejected'],
+    enum: ['pending', 'completed', 'approved', 'rejected', 'incomplete', 'cancelled'],
     description: 'Filter by admission status',
   })
   @ApiQuery({
@@ -309,7 +324,13 @@ export class AdmissionController {
     name: 'search',
     required: false,
     type: String,
-    description: 'Search by registration ID, name, or mobile number',
+    description: 'Search by registration ID, name, institute, or mobile number',
+  })
+  @ApiQuery({
+    name: 'createdBy',
+    required: false,
+    type: String,
+    description: 'Filter by creator user ID',
   })
   @ApiQuery({
     name: 'page',
@@ -332,16 +353,25 @@ export class AdmissionController {
       example: {
         admissions: [
           {
-            registrationId: 'REG20231206001',
+            registrationId: 'REG001',
             name: 'John Doe',
+            instituteName: 'ABC School',
             studentGender: 'male',
-            admissionType: 'regular',
+            religion: 'islam',
+            guardianMobileNumber: '01712345678',
+            admissionType: 'monthly',
             status: 'pending',
             totalFee: 5000,
             paidAmount: 2000,
             dueAmount: 3000,
             admissionDate: '2023-12-06T10:30:00.000Z',
             createdAt: '2023-12-06T10:30:00.000Z',
+            createdBy: {
+              _id: '507f1f77bcf86cd799439022',
+              email: 'admin@example.com',
+              username: 'admin',
+              role: 'user_admin'
+            }
           }
         ],
         total: 1,
@@ -386,6 +416,7 @@ export class AdmissionController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('search') search?: string,
+    @Query('createdBy') createdBy?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number = 10,
   ): Promise<{
@@ -403,6 +434,7 @@ export class AdmissionController {
     if (startDate) filters.startDate = new Date(startDate);
     if (endDate) filters.endDate = new Date(endDate);
     if (search) filters.search = search;
+    if (createdBy) filters.createdBy = createdBy;
 
     const result = await this.admissionService.findAll(filters, { page, limit });
     
@@ -422,7 +454,7 @@ export class AdmissionController {
   @ApiParam({
     name: 'registrationId',
     description: 'Registration ID',
-    example: 'REG20231206001',
+    example: 'REG001',
   })
   @ApiResponse({ 
     status: HttpStatus.NO_CONTENT, 
@@ -434,7 +466,7 @@ export class AdmissionController {
     schema: {
       example: {
         statusCode: 404,
-        message: 'Admission with registration ID REG20231206001 not found',
+        message: 'Admission with registration ID REG001 not found',
         error: 'Not Found',
       },
     },
@@ -448,7 +480,7 @@ export class AdmissionController {
         message: 'Invalid authentication token',
         code: 'INVALID_TOKEN',
         timestamp: '2023-12-06T10:30:00.000Z',
-        path: '/admissions/REG20231206001',
+        path: '/admissions/REG001',
       },
     },
   })
@@ -463,7 +495,7 @@ export class AdmissionController {
         requiredRoles: ['super_admin'],
         userRole: 'user_admin',
         timestamp: '2023-12-06T10:30:00.000Z',
-        path: '/admissions/REG20231206001',
+        path: '/admissions/REG001',
       },
     },
   })
@@ -473,7 +505,7 @@ export class AdmissionController {
   }
 
   @Get('statistics/summary')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.STAFF)
   @ApiOperation({ summary: 'Get admission statistics' })
   @ApiResponse({ 
     status: HttpStatus.OK, 
@@ -512,15 +544,17 @@ export class AdmissionController {
         statusCode: 403,
         message: 'Insufficient permissions',
         code: 'INSUFFICIENT_PERMISSIONS',
-        requiredRoles: ['super_admin', 'user_admin'],
-        userRole: 'staff',
+        requiredRoles: ['super_admin', 'user_admin', 'staff'],
+        userRole: null,
         timestamp: '2023-12-06T10:30:00.000Z',
         path: '/admissions/statistics/summary',
       },
     },
   })
-  async getStatistics(): Promise<any> {
-    return await this.admissionService.getStatistics();
+  async getStatistics(@Req() req: Request): Promise<any> {
+    const user = req.user as any;
+    const userId = user?._id;
+    return await this.admissionService.getStatistics(userId);
   }
 
   @Get('search/quick')
@@ -588,43 +622,119 @@ export class AdmissionController {
     return result.admissions.map(admission => this.mapToResponseDto(admission));
   }
 
-  // Helper method to map admission to response DTO
-  private mapToResponseDto(admission: any): AdmissionResponseDto {
+  @Get('my-admissions')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.STAFF)
+  @ApiOperation({ summary: 'Get admissions created by the current user' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['pending', 'completed', 'approved', 'rejected', 'incomplete', 'cancelled'],
+    description: 'Filter by admission status',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search by registration ID, name, or institute',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (starts from 1)',
+    example: 1,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of items per page',
+    example: 10,
+  })
+  async getMyAdmissions(
+    @Req() req: Request,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number = 10,
+  ): Promise<{
+    admissions: AdmissionResponseDto[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const user = req.user as any;
+    if (!user || !user._id) {
+      throw new Error('User authentication failed - no user ID found');
+    }
+
+    const filters: any = {};
+    if (status) filters.status = status;
+    if (search) filters.search = search;
+
+    const result = await this.admissionService.getMyAdmissions(user._id, filters, { page, limit });
+    
     return {
-      registrationId: admission.registrationId,
-      name: admission.name,
-      nameNative: admission.nameNative,
-      studentGender: admission.studentGender,
-      studentDateOfBirth: admission.studentDateOfBirth,
-      age: admission.age,
-      presentAddress: admission.presentAddress,
-      permanentAddress: admission.permanentAddress,
-      religion: admission.religion,
-      whatsappMobile: admission.whatsappMobile,
-      studentMobileNumber: admission.studentMobileNumber,
-      instituteName: admission.instituteName,
-      fathersName: admission.fathersName,
-      mothersName: admission.mothersName,
-      guardianMobileNumber: admission.guardianMobileNumber,
-      motherMobileNumber: admission.motherMobileNumber,
-      admissionType: admission.admissionType,
-      courseFee: admission.courseFee,
-      admissionFee: admission.admissionFee,
-      tuitionFee: admission.tuitionFee,
-      referBy: admission.referBy,
-      admissionDate: admission.admissionDate,
-      batches: admission.batches,
-      status: admission.status,
-      isCompleted: admission.isCompleted,
-      totalFee: admission.totalFee,
-      paidAmount: admission.paidAmount,
-      dueAmount: admission.dueAmount,
-      photoUrl: admission.photoUrl,
-      remarks: admission.remarks,
-      completedAt: admission.completedAt,
-      approvedAt: admission.approvedAt,
-      createdAt: admission.createdAt,
-      updatedAt: admission.updatedAt,
+      admissions: result.admissions.map(admission => this.mapToResponseDto(admission)),
+      total: result.total,
+      page: result.page,
+      limit: result.limit,
+      totalPages: result.totalPages,
     };
   }
+
+  // Helper method to map admission to response DTO
+private mapToResponseDto(admission: any): AdmissionResponseDto {
+  return {
+    _id: admission._id.toString(),
+    registrationId: admission.registrationId,
+    name: admission.name,
+    instituteName: admission.instituteName,
+    studentGender: admission.studentGender,
+    religion: admission.religion,
+    guardianMobileNumber: admission.guardianMobileNumber,
+    admissionDate: admission.admissionDate,
+    nameNative: admission.nameNative,
+    studentDateOfBirth: admission.studentDateOfBirth,
+    age: admission.age,
+    presentAddress: admission.presentAddress,
+    permanentAddress: admission.permanentAddress,
+    whatsappMobile: admission.whatsappMobile,
+    studentMobileNumber: admission.studentMobileNumber,
+    fathersName: admission.fathersName,
+    mothersName: admission.mothersName,
+    motherMobileNumber: admission.motherMobileNumber,
+    admissionType: admission.admissionType,
+    courseFee: admission.courseFee,
+    admissionFee: admission.admissionFee,
+    tuitionFee: admission.tuitionFee,
+    referBy: admission.referBy,
+    batches: admission.batches,
+    status: admission.status,
+    isCompleted: admission.isCompleted,
+    totalFee: admission.totalFee,
+    paidAmount: admission.paidAmount,
+    dueAmount: admission.dueAmount,
+    photoUrl: admission.photoUrl,
+    remarks: admission.remarks,
+    completedAt: admission.completedAt,
+    approvedAt: admission.approvedAt,
+    // Return undefined instead of null
+    createdBy: admission.createdBy ? {
+      _id: admission.createdBy._id.toString(),
+      email: admission.createdBy.email,
+      username: admission.createdBy.username,
+      role: admission.createdBy.role,
+    } : undefined,  // <-- Change null to undefined
+    updatedBy: admission.updatedBy ? {
+      _id: admission.updatedBy._id.toString(),
+      email: admission.updatedBy.email,
+      username: admission.updatedBy.username,
+      role: admission.updatedBy.role,
+    } : undefined,  // <-- Change null to undefined
+    createdAt: admission.createdAt,
+    updatedAt: admission.updatedAt,
+  };
+}
 }

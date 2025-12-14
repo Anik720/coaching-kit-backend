@@ -1,31 +1,29 @@
-// admission/dto/admission-response.dto.ts
-
 import { AdmissionStatus, AdmissionType, Gender, Religion } from "../schema/admission.schema";
 
-
 export class AdmissionResponseDto {
+  _id: string;
   registrationId: string;
   name: string;
-  nameNative?: string;
-  studentGender: Gender;
-  studentDateOfBirth: Date;
-  age: number;
-  presentAddress: string;
-  permanentAddress: string;
-  religion: Religion;
-  whatsappMobile: string;
-  studentMobileNumber: string;
   instituteName: string;
-  fathersName: string;
-  mothersName: string;
-  guardianMobileNumber?: string;
+  studentGender: Gender;
+  religion: Religion;
+  guardianMobileNumber: string;
+  admissionDate: Date;
+  nameNative?: string;
+  studentDateOfBirth?: Date;
+  age?: number;
+  presentAddress?: string;
+  permanentAddress?: string;
+  whatsappMobile?: string;
+  studentMobileNumber?: string;
+  fathersName?: string;
+  mothersName?: string;
   motherMobileNumber?: string;
   admissionType: AdmissionType;
   courseFee: number;
   admissionFee: number;
   tuitionFee: number;
   referBy?: string;
-  admissionDate: Date;
   batches: any[];
   status: AdmissionStatus;
   isCompleted: boolean;
@@ -36,6 +34,18 @@ export class AdmissionResponseDto {
   remarks?: string;
   completedAt?: Date;
   approvedAt?: Date;
+  createdBy?: {  // <-- Add ? to make it optional
+    _id: string;
+    email?: string;
+    username?: string;
+    role?: string;
+  };
+  updatedBy?: {  // <-- Already optional, but confirm it has ?
+    _id: string;
+    email?: string;
+    username?: string;
+    role?: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 }

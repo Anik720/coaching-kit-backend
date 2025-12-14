@@ -1,4 +1,3 @@
-// student/dto/student-response.dto.ts
 import { Gender, Religion, AdmissionType } from '../schemas/student.schema';
 
 export class ClassResponseDto {
@@ -14,15 +13,19 @@ export class BatchResponseDto {
   batchClosingDate: Date;
 }
 
+export class UserResponseDto {
+  _id: string;
+  email?: string;
+  username?: string;
+  role?: string;
+  name?: string;
+}
+
 export class StudentResponseDto {
   _id: string;
   registrationId: string;
-
-  // --- FIX HERE: Add '?' to make them optional ---
-  class?: ClassResponseDto; 
-  batch?: BatchResponseDto; 
-  // ----------------------------------------------
-
+  class?: ClassResponseDto;
+  batch?: BatchResponseDto;
   nameEnglish: string;
   subunitCategory?: string;
   dateOfBirth: Date;
@@ -50,6 +53,8 @@ export class StudentResponseDto {
   status: string;
   isActive: boolean;
   remarks?: string;
+  createdBy?: UserResponseDto;
+  updatedBy?: UserResponseDto;
   createdAt: Date;
   updatedAt: Date;
 }

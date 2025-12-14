@@ -23,6 +23,8 @@ export class StudentService {
     try {
       const classDetails = (student as any).classDetails as any;
       const batchDetails = (student as any).batchDetails as any;
+      const createdByUser = (student as any).createdByUser as any;
+      const updatedByUser = (student as any).updatedByUser as any;
       const studentId = (student as any)._id;
 
       return {
@@ -66,6 +68,20 @@ export class StudentService {
         status: student.status,
         isActive: student.isActive,
         remarks: student.remarks,
+        createdBy: createdByUser ? {
+          _id: createdByUser._id.toString(),
+          email: createdByUser.email,
+          username: createdByUser.username,
+          role: createdByUser.role,
+          name: createdByUser.name
+        } : undefined,
+        updatedBy: updatedByUser ? {
+          _id: updatedByUser._id.toString(),
+          email: updatedByUser.email,
+          username: updatedByUser.username,
+          role: updatedByUser.role,
+          name: updatedByUser.name
+        } : undefined,
         createdAt: (student as any).createdAt,
         updatedAt: (student as any).updatedAt
       };
@@ -75,9 +91,14 @@ export class StudentService {
     }
   }
 
-  async create(createStudentDto: CreateStudentDto): Promise<StudentResponseDto> {
+  async create(createStudentDto: CreateStudentDto, userId: string): Promise<StudentResponseDto> {
     try {
       console.log('Creating student with registration ID:', createStudentDto.registrationId);
+
+      // Validate user ID
+      if (!Types.ObjectId.isValid(userId)) {
+        throw new BadRequestException('Invalid user ID');
+      }
 
       // Check if registration ID already exists
       if (createStudentDto.registrationId) {
@@ -91,13 +112,19 @@ export class StudentService {
         }
       }
 
-      const createdStudent = new this.studentModel(createStudentDto);
+      const createdStudent = new this.studentModel({
+        ...createStudentDto,
+        createdBy: new Types.ObjectId(userId)
+      });
+      
       const savedStudent = await createdStudent.save();
       console.log('Student created successfully:', savedStudent.registrationId);
       
       const populatedStudent = await this.studentModel
         .findById(savedStudent._id)
         .populate('classDetails')
+        .populate('createdByUser', 'email username role name')
+        .populate('updatedByUser', 'email username role name')
         .populate({
           path: 'batchDetails',
           populate: [
@@ -140,7 +167,8 @@ export class StudentService {
         status,
         isActive,
         gender,
-        admissionType
+        admissionType,
+        createdBy
       } = query;
 
       const filter: any = {};
@@ -166,6 +194,9 @@ export class StudentService {
       if (isActive !== undefined) filter.isActive = isActive === 'true';
       if (gender) filter.gender = gender;
       if (admissionType) filter.admissionType = admissionType;
+      if (createdBy && Types.ObjectId.isValid(createdBy)) {
+        filter.createdBy = new Types.ObjectId(createdBy);
+      }
 
       const pageNum = Number(page) || 1;
       const limitNum = Number(limit) || 10;
@@ -173,6 +204,8 @@ export class StudentService {
       const students = await this.studentModel
         .find(filter)
         .populate('classDetails')
+        .populate('createdByUser', 'email username role name')
+        .populate('updatedByUser', 'email username role name')
         .populate({
           path: 'batchDetails',
           populate: [
@@ -202,6 +235,8 @@ export class StudentService {
       const student = await this.studentModel
         .findById(id)
         .populate('classDetails')
+        .populate('createdByUser', 'email username role name')
+        .populate('updatedByUser', 'email username role name')
         .populate({
           path: 'batchDetails',
           populate: [
@@ -236,6 +271,8 @@ export class StudentService {
       const student = await this.studentModel
         .findOne({ registrationId: registrationId.trim() })
         .populate('classDetails')
+        .populate('createdByUser', 'email username role name')
+        .populate('updatedByUser', 'email username role name')
         .populate({
           path: 'batchDetails',
           populate: [
@@ -261,7 +298,7 @@ export class StudentService {
     }
   }
 
-  async update(id: string, updateStudentDto: UpdateStudentDto): Promise<StudentResponseDto> {
+  async update(id: string, updateStudentDto: UpdateStudentDto, userId?: string): Promise<StudentResponseDto> {
     try {
       if (!Types.ObjectId.isValid(id)) {
         throw new BadRequestException('Invalid student ID');
@@ -279,9 +316,21 @@ export class StudentService {
         }
       }
 
+      const updateData: any = { ...updateStudentDto };
+      
+      // Add updatedBy if userId is provided
+      if (userId) {
+        if (!Types.ObjectId.isValid(userId)) {
+          throw new BadRequestException('Invalid user ID');
+        }
+        updateData.updatedBy = new Types.ObjectId(userId);
+      }
+
       const student = await this.studentModel
-        .findByIdAndUpdate(id, updateStudentDto, { new: true })
+        .findByIdAndUpdate(id, updateData, { new: true })
         .populate('classDetails')
+        .populate('createdByUser', 'email username role name')
+        .populate('updatedByUser', 'email username role name')
         .populate({
           path: 'batchDetails',
           populate: [
@@ -331,19 +380,31 @@ export class StudentService {
     }
   }
 
-  async updateStatus(id: string, status: string, isActive: boolean): Promise<StudentResponseDto> {
+  async updateStatus(id: string, status: string, isActive: boolean, userId?: string): Promise<StudentResponseDto> {
     try {
       if (!Types.ObjectId.isValid(id)) {
         throw new BadRequestException('Invalid student ID');
       }
 
+      const updateData: any = { status, isActive };
+      
+      // Add updatedBy if userId is provided
+      if (userId) {
+        if (!Types.ObjectId.isValid(userId)) {
+          throw new BadRequestException('Invalid user ID');
+        }
+        updateData.updatedBy = new Types.ObjectId(userId);
+      }
+
       const student = await this.studentModel
         .findByIdAndUpdate(
           id,
-          { status, isActive },
+          updateData,
           { new: true }
         )
         .populate('classDetails')
+        .populate('createdByUser', 'email username role name')
+        .populate('updatedByUser', 'email username role name')
         .populate({
           path: 'batchDetails',
           populate: [
@@ -369,7 +430,7 @@ export class StudentService {
     }
   }
 
-  async makePayment(id: string, amount: number): Promise<StudentResponseDto> {
+  async makePayment(id: string, amount: number, userId?: string): Promise<StudentResponseDto> {
     try {
       if (!Types.ObjectId.isValid(id)) {
         throw new BadRequestException('Invalid student ID');
@@ -394,6 +455,14 @@ export class StudentService {
       student.paidAmount = newPaidAmount;
       student.dueAmount = (student.totalAmount || 0) - newPaidAmount;
       
+      // Add updatedBy if userId is provided
+      if (userId) {
+        if (!Types.ObjectId.isValid(userId)) {
+          throw new BadRequestException('Invalid user ID');
+        }
+        student.updatedBy = new Types.ObjectId(userId);
+      }
+      
       if (student.admissionType === AdmissionType.MONTHLY) {
         const nextDate = new Date();
         nextDate.setMonth(nextDate.getMonth() + 1);
@@ -405,6 +474,8 @@ export class StudentService {
       const populatedStudent = await this.studentModel
         .findById(updatedStudent._id)
         .populate('classDetails')
+        .populate('createdByUser', 'email username role name')
+        .populate('updatedByUser', 'email username role name')
         .populate({
           path: 'batchDetails',
           populate: [
@@ -430,25 +501,34 @@ export class StudentService {
     }
   }
 
-  async getStatistics(): Promise<any> {
+  async getStatistics(userId?: string): Promise<any> {
     try {
+      const query: any = {};
+      if (userId && Types.ObjectId.isValid(userId)) {
+        query.createdBy = new Types.ObjectId(userId);
+      }
+
       const [totalStudents, activeStudents, totalDue, duePayments, monthlyStudents] = await Promise.all([
-        this.studentModel.countDocuments(),
-        this.studentModel.countDocuments({ isActive: true }),
+        this.studentModel.countDocuments(query),
+        this.studentModel.countDocuments({ ...query, isActive: true }),
         this.studentModel.aggregate([
+          { $match: query },
           { $group: { _id: null, total: { $sum: '$dueAmount' } } }
         ]),
         this.studentModel.countDocuments({
+          ...query,
           dueAmount: { $gt: 0 },
           isActive: true
         }),
         this.studentModel.countDocuments({
+          ...query,
           admissionType: AdmissionType.MONTHLY,
           isActive: true
         }),
       ]);
 
       const classDistribution = await this.studentModel.aggregate([
+        { $match: query },
         { $group: { _id: '$class', count: { $sum: 1 } } },
         { $lookup: { from: 'classes', localField: '_id', foreignField: '_id', as: 'class' } },
         { $unwind: '$class' },
@@ -467,6 +547,103 @@ export class StudentService {
     } catch (error) {
       console.error('Get statistics error:', error);
       throw new InternalServerErrorException('Failed to get student statistics');
+    }
+  }
+
+  async getMyStudents(userId: string, filters?: any, pagination?: any) {
+    try {
+      if (!Types.ObjectId.isValid(userId)) {
+        throw new BadRequestException('Invalid user ID');
+      }
+
+      const query: any = { createdBy: new Types.ObjectId(userId) };
+      
+      if (filters?.status) {
+        query.status = filters.status;
+      }
+      if (filters?.isActive !== undefined) {
+        query.isActive = filters.isActive;
+      }
+      if (filters?.search) {
+        query.$or = [
+          { nameEnglish: { $regex: filters.search, $options: 'i' } },
+          { registrationId: { $regex: filters.search, $options: 'i' } },
+          { fatherName: { $regex: filters.search, $options: 'i' } },
+          { fatherMobileNumber: { $regex: filters.search, $options: 'i' } }
+        ];
+      }
+      if (filters?.classId && Types.ObjectId.isValid(filters.classId)) {
+        query.class = new Types.ObjectId(filters.classId);
+      }
+      if (filters?.batchId && Types.ObjectId.isValid(filters.batchId)) {
+        query.batch = new Types.ObjectId(filters.batchId);
+      }
+
+      const { page = 1, limit = 10 } = pagination || {};
+      const skip = (page - 1) * limit;
+
+      const [students, total] = await Promise.all([
+        this.studentModel
+          .find(query)
+          .populate('classDetails')
+          .populate('createdByUser', 'email username role name')
+          .populate('updatedByUser', 'email username role name')
+          .populate({
+            path: 'batchDetails',
+            populate: [
+              { path: 'classDetails' },
+              { path: 'groupDetails' },
+              { path: 'subjectDetails' }
+            ]
+          })
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .exec(),
+        this.studentModel.countDocuments(query).exec()
+      ]);
+
+      return {
+        students: students.map(student => this.mapToResponseDto(student)),
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / limit),
+      };
+    } catch (error) {
+      console.error('Get my students error:', error);
+      throw new InternalServerErrorException('Failed to fetch user students');
+    }
+  }
+
+  async countStudentsByUser(userId: string): Promise<number> {
+    try {
+      if (!Types.ObjectId.isValid(userId)) {
+        throw new BadRequestException('Invalid user ID');
+      }
+      
+      return this.studentModel.countDocuments({ 
+        createdBy: new Types.ObjectId(userId) 
+      }).exec();
+    } catch (error) {
+      console.error('Count students by user error:', error);
+      throw new InternalServerErrorException('Failed to count user students');
+    }
+  }
+
+  async countActiveStudentsByUser(userId: string): Promise<number> {
+    try {
+      if (!Types.ObjectId.isValid(userId)) {
+        throw new BadRequestException('Invalid user ID');
+      }
+      
+      return this.studentModel.countDocuments({ 
+        createdBy: new Types.ObjectId(userId),
+        isActive: true 
+      }).exec();
+    } catch (error) {
+      console.error('Count active students by user error:', error);
+      throw new InternalServerErrorException('Failed to count active user students');
     }
   }
 }

@@ -16,8 +16,12 @@ export class SubjectService {
     @InjectModel(Subject.name) private subjectModel: Model<SubjectDocument>,
   ) {}
 
-  async create(dto: CreateSubjectDto) {
+  async create(dto: CreateSubjectDto, userId: string) {
     try {
+      if (!Types.ObjectId.isValid(userId)) {
+        throw new BadRequestException('Invalid user ID');
+      }
+
       // Check for duplicate subject name (case-insensitive)
       const existingSubject = await this.subjectModel
         .findOne({ subjectName: { $regex: new RegExp(`^${dto.subjectName}$`, 'i') } })
@@ -27,15 +31,24 @@ export class SubjectService {
         throw new ConflictException('Subject with this name already exists');
       }
 
-      const created = new this.subjectModel(dto);
-      return await created.save();
+      const userObjectId = new Types.ObjectId(userId);
+      const newSubject = new this.subjectModel({
+        ...dto,
+        createdBy: userObjectId
+      });
+      
+      const savedSubject = await newSubject.save();
+      
+      // Populate createdBy field
+      await savedSubject.populate('createdBy', 'email username role');
+      
+      return savedSubject;
     } catch (err) {
-      if (err instanceof ConflictException) {
+      if (err instanceof ConflictException || err instanceof BadRequestException) {
         throw err;
       }
-      // handle unique index errors gracefully
       if (err?.code === 11000) {
-        throw new BadRequestException('Subject with this name already exists');
+        throw new ConflictException('Subject with this name already exists');
       }
       throw err;
     }
@@ -58,13 +71,15 @@ export class SubjectService {
       filter.subjectName = { $regex: search, $options: 'i' };
     }
     
-    // if (isActive !== undefined) {
-    //   filter.isActive = isActive === true || isActive === 'true';
-    // }
+    if (isActive !== undefined) {
+      filter.isActive = isActive === true;
+    }
     
     const skip = (page - 1) * limit;
     const docs = await this.subjectModel
       .find(filter)
+      .populate('createdBy', 'email username role')
+      .populate('updatedBy', 'email username role')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -87,12 +102,17 @@ export class SubjectService {
       throw new BadRequestException('Invalid subject ID');
     }
 
-    const result = await this.subjectModel.findById(id).exec();
+    const result = await this.subjectModel
+      .findById(id)
+      .populate('createdBy', 'email username role')
+      .populate('updatedBy', 'email username role')
+      .exec();
+    
     if (!result) throw new NotFoundException('Subject not found');
     return result;
   }
 
-  async update(id: string, dto: UpdateSubjectDto) {
+  async update(id: string, dto: UpdateSubjectDto, userId?: string) {
     try {
       if (!Types.ObjectId.isValid(id)) {
         throw new BadRequestException('Invalid subject ID');
@@ -112,8 +132,18 @@ export class SubjectService {
         }
       }
 
+      const updateData: any = { ...dto };
+      if (userId) {
+        if (!Types.ObjectId.isValid(userId)) {
+          throw new BadRequestException('Invalid user ID');
+        }
+        updateData.updatedBy = new Types.ObjectId(userId);
+      }
+
       const updated = await this.subjectModel
-        .findByIdAndUpdate(id, dto, { new: true, runValidators: true })
+        .findByIdAndUpdate(id, updateData, { new: true, runValidators: true })
+        .populate('createdBy', 'email username role')
+        .populate('updatedBy', 'email username role')
         .exec();
         
       if (!updated) throw new NotFoundException('Subject not found');
@@ -126,7 +156,7 @@ export class SubjectService {
         throw err;
       }
       if (err?.code === 11000) {
-        throw new BadRequestException('Subject with this name already exists');
+        throw new ConflictException('Subject with this name already exists');
       }
       throw err;
     }
@@ -137,30 +167,43 @@ export class SubjectService {
       throw new BadRequestException('Invalid subject ID');
     }
 
-    const deleted = await this.subjectModel.findByIdAndDelete(id).exec();
+    const deleted = await this.subjectModel
+      .findByIdAndDelete(id)
+      .populate('createdBy', 'email username role')
+      .exec();
+    
     if (!deleted) throw new NotFoundException('Subject not found');
     
-    return { message: 'Subject deleted successfully' };
+    return { 
+      message: 'Subject deleted successfully',
+      deletedSubject: deleted
+    };
   }
 
-  // optional helper: find by name
   async findByName(name: string) {
     return this.subjectModel
       .findOne({ subjectName: name })
       .collation({ locale: 'en', strength: 2 })
+      .populate('createdBy', 'email username role')
       .exec();
   }
 
   async findActive() {
     return this.subjectModel
       .find({ isActive: true })
+      .populate('createdBy', 'email username role')
+      .populate('updatedBy', 'email username role')
       .sort({ subjectName: 1 })
       .exec();
   }
 
-  async toggleActive(id: string) {
+  async toggleActive(id: string, userId: string) {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid subject ID');
+    }
+
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Invalid user ID');
     }
 
     const subject = await this.subjectModel.findById(id).exec();
@@ -168,13 +211,22 @@ export class SubjectService {
       throw new NotFoundException('Subject not found');
     }
 
-    // subject.isActive = !subject.isActive;
+    subject.isActive = !subject.isActive;
+    subject.updatedBy = new Types.ObjectId(userId);
     await subject.save();
+    
+    await subject.populate([
+      { path: 'createdBy', select: 'email username role' },
+      { path: 'updatedBy', select: 'email username role' }
+    ]);
 
     return {
       _id: subject._id,
       subjectName: subject.subjectName,
-      // isActive: subject.isActive,
+      description: subject.description,
+      isActive: subject.isActive,
+      createdBy: subject.createdBy,
+      updatedBy: subject.updatedBy,
       message: 'Subject status updated successfully',
     };
   }
@@ -184,7 +236,12 @@ export class SubjectService {
       throw new BadRequestException('Invalid subject ID');
     }
 
-    const subject = await this.subjectModel.findById(id).exec();
+    const subject = await this.subjectModel
+      .findById(id)
+      .populate('createdBy', 'email username role')
+      .populate('updatedBy', 'email username role')
+      .exec();
+    
     if (!subject) {
       throw new NotFoundException('Subject not found');
     }
@@ -193,12 +250,88 @@ export class SubjectService {
       subject: {
         _id: subject._id,
         subjectName: subject.subjectName,
-        // isActive: subject.isActive,
+        description: subject.description,
+        isActive: subject.isActive,
+        createdBy: subject.createdBy,
+        updatedBy: subject.updatedBy,
       },
       totalBatches: 0,
       activeBatches: 0,
       totalStudents: 0,
       averageStudentsPerBatch: 0,
     };
+  }
+
+  async findByCreator(userId: string, query?: any) {
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+
+    const { 
+      search, 
+      isActive, 
+      page = 1, 
+      limit = 10, 
+      sortBy = 'createdAt', 
+      sortOrder = 'desc' 
+    } = query || {};
+    
+    const filter: any = { createdBy: new Types.ObjectId(userId) };
+    
+    if (search) {
+      filter.subjectName = { $regex: search, $options: 'i' };
+    }
+    
+    if (isActive !== undefined) {
+      filter.isActive = isActive === 'true' || isActive === true;
+    }
+    
+    const currentPage = Math.max(1, Number(page));
+    const pageSize = Math.max(1, Math.min(100, Number(limit)));
+    const skip = (currentPage - 1) * pageSize;
+    
+    const sort: any = {};
+    sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+    const [data, total] = await Promise.all([
+      this.subjectModel
+        .find(filter)
+        .populate('createdBy', 'email username role')
+        .populate('updatedBy', 'email username role')
+        .sort(sort)
+        .skip(skip)
+        .limit(pageSize)
+        .exec(),
+      this.subjectModel.countDocuments(filter).exec(),
+    ]);
+
+    return {
+      data,
+      total,
+      page: currentPage,
+      limit: pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async countSubjectsByUser(userId: string): Promise<number> {
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+    
+    return this.subjectModel.countDocuments({ 
+      createdBy: new Types.ObjectId(userId) 
+    }).exec();
+  }
+
+  async countActiveSubjectsByUser(userId: string): Promise<number> {
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+    
+    return this.subjectModel.countDocuments({ 
+      createdBy: new Types.ObjectId(userId),
+      isActive: true 
+    }).exec();
   }
 }

@@ -1,5 +1,3 @@
-// admission/dto/create-admission.dto.ts
-
 import {
   IsString,
   IsOptional,
@@ -12,10 +10,10 @@ import {
   MaxLength,
   MinLength,
   Matches,
+  IsNotEmpty,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { AdmissionType, Gender, Religion } from '../schema/admission.schema';
-
 
 export class BatchSubjectDto {
   @IsOptional()
@@ -60,67 +58,79 @@ export class BatchDto {
 
 export class CreateAdmissionDto {
   @IsString()
-  @MinLength(6)
-  @MaxLength(10)
+  @IsNotEmpty()
+  @MaxLength(50)
   registrationId: string;
 
   @IsString()
+  @IsNotEmpty()
   @MinLength(2)
   @MaxLength(100)
   name: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(2)
+  @MaxLength(200)
+  instituteName: string;
+
+  @IsEnum(Gender)
+  @IsNotEmpty()
+  studentGender: Gender;
+
+  @IsEnum(Religion)
+  @IsNotEmpty()
+  religion: Religion;
+
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^01[3-9]\d{8}$/, {
+    message: 'Please provide a valid Bangladeshi mobile number',
+  })
+  guardianMobileNumber: string;
+
+  @IsOptional()
+  @IsDateString()
+  admissionDate?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(100)
   nameNative?: string;
 
-  @IsEnum(Gender)
-  studentGender: Gender;
-
+  @IsOptional()
   @IsDateString()
-  studentDateOfBirth: string;
+  studentDateOfBirth?: string;
 
+  @IsOptional()
   @IsString()
-  @MinLength(5)
-  presentAddress: string;
+  presentAddress?: string;
 
+  @IsOptional()
   @IsString()
-  @MinLength(5)
-  permanentAddress: string;
-
-  @IsEnum(Religion)
-  religion: Religion;
-
-  @IsString()
-  @Matches(/^01[3-9]\d{8}$/, {
-    message: 'Please provide a valid Bangladeshi mobile number',
-  })
-  whatsappMobile: string;
-
-  @IsString()
-  @Matches(/^01[3-9]\d{8}$/, {
-    message: 'Please provide a valid Bangladeshi mobile number',
-  })
-  studentMobileNumber: string;
-
-  @IsString()
-  @MinLength(2)
-  instituteName: string;
-
-  @IsString()
-  @MinLength(2)
-  fathersName: string;
-
-  @IsString()
-  @MinLength(2)
-  mothersName: string;
+  permanentAddress?: string;
 
   @IsOptional()
   @IsString()
   @Matches(/^01[3-9]\d{8}$/, {
     message: 'Please provide a valid Bangladeshi mobile number',
   })
-  guardianMobileNumber?: string;
+  whatsappMobile?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^01[3-9]\d{8}$/, {
+    message: 'Please provide a valid Bangladeshi mobile number',
+  })
+  studentMobileNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  fathersName?: string;
+
+  @IsOptional()
+  @IsString()
+  mothersName?: string;
 
   @IsOptional()
   @IsString()
@@ -129,8 +139,9 @@ export class CreateAdmissionDto {
   })
   motherMobileNumber?: string;
 
+  @IsOptional()
   @IsEnum(AdmissionType)
-  admissionType: AdmissionType;
+  admissionType?: AdmissionType;
 
   @IsOptional()
   @IsNumber()
@@ -150,10 +161,6 @@ export class CreateAdmissionDto {
   @IsOptional()
   @IsString()
   referBy?: string;
-
-  @IsOptional()
-  @IsDateString()
-  admissionDate?: string;
 
   @IsOptional()
   @Transform(({ value }) => {
