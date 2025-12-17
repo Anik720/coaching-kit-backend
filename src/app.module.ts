@@ -9,6 +9,8 @@ import { AdmissionModule } from './Admission/admission.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/user.module';
 import { SuggestionComplaintModule } from './suggestion-complaint/suggestion-complaint.module';
+import { TeacherModule } from './teacher/teacher.module';
+import { AttendanceModule } from './teacher attendence/attendance.module';
 
 
 @Module({
@@ -30,7 +32,9 @@ import { SuggestionComplaintModule } from './suggestion-complaint/suggestion-com
      AdmissionModule,
      AuthModule,
      UsersModule,
-     SuggestionComplaintModule
+     SuggestionComplaintModule,
+     TeacherModule,
+     AttendanceModule
 
   ],
   controllers: [AppController],
