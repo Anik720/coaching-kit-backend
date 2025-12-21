@@ -11,6 +11,7 @@ import { UsersModule } from './users/user.module';
 import { SuggestionComplaintModule } from './suggestion-complaint/suggestion-complaint.module';
 import { TeacherModule } from './teacher/teacher.module';
 import { AttendanceModule } from './teacher attendence/attendance.module';
+import { InstituteModule } from './institute/institute.module';
 
 
 @Module({
@@ -34,7 +35,8 @@ import { AttendanceModule } from './teacher attendence/attendance.module';
      UsersModule,
      SuggestionComplaintModule,
      TeacherModule,
-     AttendanceModule
+     AttendanceModule,
+     InstituteModule
 
   ],
   controllers: [AppController],
