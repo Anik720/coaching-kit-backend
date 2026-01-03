@@ -1,4 +1,3 @@
-// batch.service.ts
 import {
   Injectable,
   NotFoundException,
@@ -135,7 +134,7 @@ export class BatchService {
     // Get total count
     const total = await this.batchModel.countDocuments(filter);
 
-    // Build query with population - Removed .lean() and fixed populate for createdBy
+    // Build query with population
     const batchQuery = this.batchModel
       .find(filter)
       .populate('className', 'classname')
@@ -150,7 +149,6 @@ export class BatchService {
       .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 });
 
     const data = await batchQuery.exec();
-    console.log('Fetched batches:', data);
 
     return {
       data: data,
@@ -421,6 +419,219 @@ export class BatchService {
       available: currentStudents < batch.maxStudents,
       currentStudents,
       maxStudents: batch.maxStudents,
+    };
+  }
+
+  // Get batches by class ID
+  async getBatchesByClass(classId: string, query?: BatchQueryDto): Promise<{
+    data: Batch[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    if (!Types.ObjectId.isValid(classId)) {
+      throw new BadRequestException('Invalid class ID');
+    }
+
+    const {
+      search,
+      group,
+      subject,
+      sessionYear,
+      status,
+      isActive,
+      createdBy,
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = query || {};
+
+    const filter: any = { className: new Types.ObjectId(classId) };
+
+    // Build additional filters
+    if (search) {
+      filter.$or = [
+        { batchName: { $regex: search, $options: 'i' } },
+        { sessionYear: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    if (group) {
+      filter.group = new Types.ObjectId(group);
+    }
+
+    if (subject) {
+      filter.subject = new Types.ObjectId(subject);
+    }
+
+    if (sessionYear) {
+      filter.sessionYear = sessionYear;
+    }
+
+    if (status) {
+      filter.status = status;
+    }
+
+    if (isActive !== undefined) {
+      filter.isActive = isActive === 'true';
+    }
+
+    if (createdBy) {
+      filter.createdBy = new Types.ObjectId(createdBy);
+    }
+
+    const skip = (page - 1) * limit;
+
+    // Get total count
+    const total = await this.batchModel.countDocuments(filter);
+
+    // Build query with population
+    const batchQuery = this.batchModel
+      .find(filter)
+      .populate({
+        path: 'className',
+        select: 'classname',
+        model: 'Class',
+      })
+      .populate({
+        path: 'group',
+        select: 'groupName',
+        model: 'Group',
+      })
+      .populate({
+        path: 'subject',
+        select: 'subjectName',
+        model: 'Subject',
+      })
+      .populate({
+        path: 'createdBy',
+        select: 'username email firstName lastName',
+        model: 'User',
+      })
+      .skip(skip)
+      .limit(limit)
+      .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 });
+
+    const data = await batchQuery.exec();
+
+    return {
+      data,
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  // Get active batches by class ID
+  async getActiveBatchesByClass(classId: string): Promise<Batch[]> {
+    if (!Types.ObjectId.isValid(classId)) {
+      throw new BadRequestException('Invalid class ID');
+    }
+
+    const today = new Date();
+    
+    const batches = await this.batchModel
+      .find({
+        className: new Types.ObjectId(classId),
+        isActive: true,
+        status: 'active',
+        batchClosingDate: { $gte: today }, // Only batches that haven't closed yet
+      })
+      .populate({
+        path: 'className',
+        select: 'classname',
+        model: 'Class',
+      })
+      .populate({
+        path: 'group',
+        select: 'groupName',
+        model: 'Group',
+      })
+      .populate({
+        path: 'subject',
+        select: 'subjectName',
+        model: 'Subject',
+      })
+      .populate({
+        path: 'createdBy',
+        select: 'username email firstName lastName',
+        model: 'User',
+      })
+      .sort({ batchStartingDate: 1 })
+      .exec();
+
+    return batches;
+  }
+
+  // Get batch statistics by class
+  async getBatchStatsByClass(classId: string): Promise<{
+    totalBatches: number;
+    activeBatches: number;
+    upcomingBatches: number;
+    completedBatches: number;
+    totalStudentsCapacity: number;
+    averageFee: number;
+  }> {
+    if (!Types.ObjectId.isValid(classId)) {
+      throw new BadRequestException('Invalid class ID');
+    }
+
+    const filter = { className: new Types.ObjectId(classId) };
+
+    const [
+      totalBatches,
+      activeBatches,
+      upcomingBatches,
+      completedBatches,
+      batchesWithData,
+    ] = await Promise.all([
+      this.batchModel.countDocuments(filter),
+      this.batchModel.countDocuments({ 
+        ...filter, 
+        status: 'active',
+        isActive: true 
+      }),
+      this.batchModel.countDocuments({ 
+        ...filter, 
+        status: 'upcoming' 
+      }),
+      this.batchModel.countDocuments({ 
+        ...filter, 
+        status: 'completed' 
+      }),
+      this.batchModel.find(filter).select('maxStudents admissionFee tuitionFee courseFee'),
+    ]);
+
+    // Calculate total student capacity
+    const totalStudentsCapacity = batchesWithData.reduce(
+      (sum, batch) => sum + (batch.maxStudents || 0),
+      0
+    );
+
+    // Calculate average total fee per batch
+    const totalFees = batchesWithData.reduce((sum, batch) => {
+      const totalFee = 
+        (batch.admissionFee || 0) + 
+        (batch.tuitionFee || 0) + 
+        (batch.courseFee || 0);
+      return sum + totalFee;
+    }, 0);
+
+    const averageFee = batchesWithData.length > 0 
+      ? totalFees / batchesWithData.length 
+      : 0;
+
+    return {
+      totalBatches,
+      activeBatches,
+      upcomingBatches,
+      completedBatches,
+      totalStudentsCapacity,
+      averageFee,
     };
   }
 

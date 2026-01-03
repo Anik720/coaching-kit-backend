@@ -31,6 +31,7 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '../../shared/interfaces/user.interface';
 import { AuthExceptionFilter } from '../../shared/filters/auth-exception.filter';
 import type { Request } from 'express';
+import { BatchService } from '../btach/batch.service';
 
 @ApiTags('academic/class')
 @ApiBearerAuth('JWT-auth')
@@ -38,7 +39,7 @@ import type { Request } from 'express';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @UseFilters(AuthExceptionFilter)
 export class ClassController {
-  constructor(private readonly classService: ClassService) {}
+  constructor(private readonly classService: ClassService,private readonly batchService: BatchService) {}
 
   @Post()
   @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN)
@@ -699,6 +700,117 @@ export class ClassController {
       userId: user?._id,
       userType: typeof user?._id,
       isObjectId: require('mongoose').Types.ObjectId.isValid(user?._id)
+    };
+  }
+
+    // Add this new endpoint method
+  @Get(':id/batches')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.STAFF)
+  @ApiOperation({ summary: 'Get batches for a specific class' })
+  @ApiParam({
+    name: 'id',
+    description: 'Class ID',
+    example: '507f1f77bcf86cd799439011',
+  })
+  @ApiQuery({ name: 'activeOnly', required: false, type: Boolean, description: 'Get only active batches' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Batches for the class',
+    schema: {
+      example: {
+        class: {
+          _id: '507f1f77bcf86cd799439011',
+          classname: 'Class 10',
+          isActive: true,
+        },
+        batches: {
+          data: [
+            {
+              _id: '507f1f77bcf86cd799439021',
+              batchName: 'Morning Science Batch',
+              group: { _id: '...', groupName: 'Science' },
+              subject: { _id: '...', subjectName: 'Physics' },
+              sessionYear: '2024-2025',
+              totalFee: 15000,
+              maxStudents: 50,
+              status: 'active',
+              isActive: true,
+            },
+          ],
+          total: 1,
+          page: 1,
+          limit: 10,
+          totalPages: 1,
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Class not found',
+  })
+  async getClassBatches(
+    @Param('id') id: string,
+    @Query('activeOnly') activeOnly?: boolean,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    // Get class details
+    const classData = await this.classService.findOne(id);
+    
+    // Build query for batches
+    const query: any = {
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 10,
+    };
+    
+    if (activeOnly === true) {
+      query.status = 'active';
+      query.isActive = 'true';
+    }
+    
+    // Get batches for this class
+    const batchesResult = await this.batchService.getBatchesByClass(id, query);
+    
+    return {
+      class: {
+        _id: classData._id,
+        classname: classData.classname,
+        isActive: classData.isActive,
+        description: classData.description,
+      },
+      batches: {
+        data: batchesResult.data.map(batch => {
+          // Cast batch as any to access toObject method
+          const plainBatch = (batch as any).toObject ? (batch as any).toObject() : batch;
+          
+          const totalFee = 
+            (plainBatch.admissionFee || 0) + 
+            (plainBatch.tuitionFee || 0) + 
+            (plainBatch.courseFee || 0);
+          
+          return {
+            _id: plainBatch._id.toString(),
+            batchName: plainBatch.batchName,
+            group: plainBatch.groupDetails || { _id: plainBatch.group.toString(), groupName: '' },
+            subject: plainBatch.subjectDetails || { _id: plainBatch.subject.toString(), subjectName: '' },
+            sessionYear: plainBatch.sessionYear,
+            batchStartingDate: plainBatch.batchStartingDate,
+            batchClosingDate: plainBatch.batchClosingDate,
+            totalFee,
+            maxStudents: plainBatch.maxStudents,
+            status: plainBatch.status,
+            isActive: plainBatch.isActive,
+            description: plainBatch.description,
+          };
+        }),
+        total: batchesResult.total,
+        page: batchesResult.page,
+        limit: batchesResult.limit,
+        totalPages: batchesResult.totalPages,
+      },
     };
   }
 }
