@@ -15,14 +15,17 @@ export class BatchQueryDto {
 
   @IsOptional()
   @IsString()
+  @IsMongoId()
   className?: string;
 
   @IsOptional()
   @IsString()
+  @IsMongoId()
   group?: string;
 
   @IsOptional()
   @IsString()
+  @IsMongoId()
   subject?: string;
 
   @IsOptional()
