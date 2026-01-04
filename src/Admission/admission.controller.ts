@@ -38,6 +38,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../shared/interfaces/user.interface';
 import { AuthExceptionFilter } from '../shared/filters/auth-exception.filter';
 import type { Request } from 'express';
+import { AdmissionStatus } from './schema/admission.schema';
 
 @ApiTags('admissions')
 @ApiBearerAuth('JWT-auth')
@@ -142,73 +143,12 @@ export class AdmissionController {
     description: 'Admission updated successfully',
     type: AdmissionResponseDto,
   })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'Admission not found',
-    schema: {
-      example: {
-        statusCode: 404,
-        message: 'Admission with registration ID REG001 not found',
-        error: 'Not Found',
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid input data',
-    schema: {
-      example: {
-        statusCode: 400,
-        message: 'Invalid date format',
-        error: 'Bad Request',
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.CONFLICT,
-    description: 'Registration ID already exists',
-    schema: {
-      example: {
-        statusCode: 409,
-        message: 'Registration ID already exists',
-        error: 'Conflict',
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Unauthorized',
-    schema: {
-      example: {
-        statusCode: 401,
-        message: 'Invalid authentication token',
-        code: 'INVALID_TOKEN',
-        timestamp: '2023-12-06T10:30:00.000Z',
-        path: '/admissions/REG001',
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.FORBIDDEN,
-    description: 'Insufficient permissions',
-    schema: {
-      example: {
-        statusCode: 403,
-        message: 'Insufficient permissions',
-        code: 'INSUFFICIENT_PERMISSIONS',
-        requiredRoles: ['super_admin', 'user_admin', 'staff'],
-        userRole: null,
-        timestamp: '2023-12-06T10:30:00.000Z',
-        path: '/admissions/REG001',
-      },
-    },
-  })
-  @ApiConsumes('multipart/form-data')
+  @ApiConsumes('application/json', 'multipart/form-data') // Add both content types
   @UseInterceptors(FileInterceptor('photo'))
   async update(
     @Param('registrationId') registrationId: string,
-    @Body() updateAdmissionDto: UpdateAdmissionDto,
     @Req() req: Request,
+    @Body() updateAdmissionDto: any, // Change from UpdateAdmissionDto to any
     @UploadedFile() photo?: any,
   ): Promise<AdmissionResponseDto> {
     const user = req.user as any;
@@ -222,9 +162,13 @@ export class AdmissionController {
       // updateAdmissionDto.photoPath = photo.path;
     }
 
+    // Convert the body to UpdateAdmissionDto
+    const dto = new UpdateAdmissionDto();
+    Object.assign(dto, updateAdmissionDto);
+
     const admission = await this.admissionService.update(
       registrationId, 
-      updateAdmissionDto,
+      dto,
       user._id
     );
     return this.mapToResponseDto(admission);
@@ -381,6 +325,7 @@ export class AdmissionController {
       },
     },
   })
+
   @ApiResponse({
     status: HttpStatus.UNAUTHORIZED,
     description: 'Unauthorized',
@@ -683,6 +628,46 @@ export class AdmissionController {
       totalPages: result.totalPages,
     };
   }
+
+  @Put(':registrationId/status')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.STAFF)
+  @ApiOperation({ summary: 'Update admission status only' })
+  @ApiParam({
+    name: 'registrationId',
+    description: 'Registration ID',
+    example: 'REG001',
+  })
+  @ApiResponse({ 
+    status: HttpStatus.OK, 
+    description: 'Status updated successfully',
+    type: AdmissionResponseDto,
+  })
+  async updateStatus(
+    @Param('registrationId') registrationId: string,
+    @Body() body: { status: string },
+    @Req() req: Request,
+  ): Promise<AdmissionResponseDto> {
+    const user = req.user as any;
+    const userId = user?._id;
+    
+    // Validate status
+    const validStatuses = Object.values(AdmissionStatus);
+    if (!validStatuses.includes(body.status as AdmissionStatus)) {
+      throw new BadRequestException(`Invalid status. Valid statuses are: ${validStatuses.join(', ')}`);
+    }
+    
+    const updateAdmissionDto = new UpdateAdmissionDto();
+    updateAdmissionDto.status = body.status as AdmissionStatus;
+    
+    const admission = await this.admissionService.update(
+      registrationId, 
+      updateAdmissionDto,
+      userId
+    );
+    return this.mapToResponseDto(admission);
+  }
+
+
 
   // Helper method to map admission to response DTO
 private mapToResponseDto(admission: any): AdmissionResponseDto {
