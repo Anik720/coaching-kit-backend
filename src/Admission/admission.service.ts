@@ -228,6 +228,53 @@ export class AdmissionService {
         updateData.updatedBy = new Types.ObjectId(userId);
       }
 
+      // Handle status changes
+      if (updateData.status) {
+        const newStatus = updateData.status as AdmissionStatus;
+        const oldStatus = admission.status;
+        
+        // Reset completion flags when moving away from COMPLETED
+        if (oldStatus === AdmissionStatus.COMPLETED && newStatus !== AdmissionStatus.COMPLETED) {
+          updateData.isCompleted = false;
+          updateData.completedAt = undefined;
+        }
+        
+        // Reset approval flags when moving away from APPROVED
+        if (oldStatus === AdmissionStatus.APPROVED && newStatus !== AdmissionStatus.APPROVED) {
+          updateData.approvedAt = undefined;
+          updateData.approvedBy = undefined;
+        }
+        
+        // Set completion flags when moving to COMPLETED
+        if (newStatus === AdmissionStatus.COMPLETED && oldStatus !== AdmissionStatus.COMPLETED) {
+          updateData.isCompleted = true;
+          updateData.completedAt = new Date();
+        }
+        
+        // Set approval flags when moving to APPROVED
+        if (newStatus === AdmissionStatus.APPROVED && oldStatus !== AdmissionStatus.APPROVED) {
+          updateData.approvedAt = new Date();
+          if (userId) {
+            updateData.approvedBy = new Types.ObjectId(userId);
+          }
+        }
+        
+        // Handle INCOMPLETE status - explicitly set as incomplete
+        if (newStatus === AdmissionStatus.INCOMPLETE) {
+          updateData.isCompleted = false;
+          updateData.completedAt = undefined;
+        }
+        
+        // Handle PENDING status
+        if (newStatus === AdmissionStatus.PENDING) {
+          // Check if we're moving from COMPLETED
+          if (oldStatus === AdmissionStatus.COMPLETED) {
+            updateData.isCompleted = false;
+            updateData.completedAt = undefined;
+          }
+        }
+      }
+
       // Parse dates if provided
       if (updateData.studentDateOfBirth) {
         updateData.studentDateOfBirth = this.parseDate(updateData.studentDateOfBirth);
@@ -263,19 +310,6 @@ export class AdmissionService {
         }
         
         delete updateData.batch_with_subjects;
-      }
-
-      // Handle status changes
-      if (updateData.status === AdmissionStatus.COMPLETED && admission.status !== AdmissionStatus.COMPLETED) {
-        updateData.completedAt = new Date();
-        updateData.isCompleted = true;
-      }
-
-      if (updateData.status === AdmissionStatus.APPROVED && admission.status !== AdmissionStatus.APPROVED) {
-        updateData.approvedAt = new Date();
-        if (userId) {
-          updateData.approvedBy = new Types.ObjectId(userId);
-        }
       }
 
       // Update numeric fields
@@ -429,20 +463,53 @@ export class AdmissionService {
       query.createdBy = new Types.ObjectId(userId);
     }
 
+    // Get all status counts in one query for efficiency
+    const statusCounts = await this.admissionModel.aggregate([
+      { $match: query },
+      { $group: {
+        _id: '$status',
+        count: { $sum: 1 }
+      }}
+    ]);
+
+    // Initialize counts
+    let pending = 0;
+    let incomplete = 0;
+    let completed = 0;
+    let approved = 0;
+    let rejected = 0;
+    let cancelled = 0;
+
+    // Map the status counts
+    statusCounts.forEach((item) => {
+      switch(item._id) {
+        case AdmissionStatus.PENDING:
+          pending = item.count;
+          break;
+        case AdmissionStatus.INCOMPLETE:
+          incomplete = item.count;
+          break;
+        case AdmissionStatus.COMPLETED:
+          completed = item.count;
+          break;
+        case AdmissionStatus.APPROVED:
+          approved = item.count;
+          break;
+        case AdmissionStatus.REJECTED:
+          rejected = item.count;
+          break;
+        case AdmissionStatus.CANCELLED:
+          cancelled = item.count;
+          break;
+      }
+    });
+
     const [
       total,
-      pending,
-      completed,
-      approved,
-      rejected,
       todayAdmissions,
       thisMonthAdmissions,
     ] = await Promise.all([
       this.admissionModel.countDocuments(query),
-      this.admissionModel.countDocuments({ ...query, status: AdmissionStatus.PENDING }),
-      this.admissionModel.countDocuments({ ...query, status: AdmissionStatus.COMPLETED }),
-      this.admissionModel.countDocuments({ ...query, status: AdmissionStatus.APPROVED }),
-      this.admissionModel.countDocuments({ ...query, status: AdmissionStatus.REJECTED }),
       this.admissionModel.countDocuments({
         ...query,
         createdAt: {
@@ -467,9 +534,11 @@ export class AdmissionService {
     return {
       total,
       pending,
+      incomplete,
       completed,
       approved,
       rejected,
+      cancelled,
       todayAdmissions,
       thisMonthAdmissions,
       totalRevenue: totalRevenue[0]?.total || 0,
