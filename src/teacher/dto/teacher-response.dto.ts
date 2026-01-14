@@ -1,5 +1,11 @@
-// teacher/dto/teacher-response.dto.ts
-import { Gender, Religion, BloodGroup, Designation, AssignType } from '../schemas/teacher.schema';
+import { 
+  Gender, 
+  Religion, 
+  BloodGroup, 
+  Designation, 
+  AssignType, 
+  TeacherStatus 
+} from '../schemas/teacher.schema';
 
 export class UserResponseDto {
   _id: string;
@@ -12,8 +18,8 @@ export class UserResponseDto {
 export class TeacherResponseDto {
   _id: string;
   fullName: string;
-  fatherName?: string;
-  motherName?: string;
+  fatherName: string;
+  motherName: string;
   religion: Religion;
   gender: Gender;
   dateOfBirth: Date;
@@ -21,22 +27,28 @@ export class TeacherResponseDto {
   emergencyContactNumber: string;
   presentAddress: string;
   permanentAddress: string;
-  whatsappNumber?: string;
+  whatsappNumber: string;
   email: string;
   secondaryEmail?: string;
-  nationalId?: string;
-  bloodGroup?: BloodGroup;
+  nationalId: string;
+  bloodGroup: BloodGroup;
   profilePicture?: string;
+  
+  // System Access
+  systemEmail: string;
   isEmailVerified: boolean;
   isPhoneVerified: boolean;
+
+  // Job Information
   designation: Designation;
   assignType: AssignType;
   monthlyTotalClass?: number;
   salary?: number;
   joiningDate: Date;
-  status: string;
+  status: TeacherStatus;
   isActive: boolean;
   remarks?: string;
+
   createdBy?: UserResponseDto;
   updatedBy?: UserResponseDto;
   createdAt: Date;

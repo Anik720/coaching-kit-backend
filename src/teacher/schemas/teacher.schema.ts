@@ -1,4 +1,3 @@
-// teacher/schemas/teacher.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
@@ -34,13 +33,25 @@ export enum Designation {
   ASSISTANT_TEACHER = 'assistant_teacher',
   SUBJECT_TEACHER = 'subject_teacher',
   CO_TEACHER = 'co_teacher',
-  VISITING_TEACHER = 'visiting_teacher'
+  VISITING_TEACHER = 'visiting_teacher',
+  PRINCIPAL = 'principal',
+  VICE_PRINCIPAL = 'vice_principal',
+  DEPARTMENT_HEAD = 'department_head'
 }
 
 export enum AssignType {
   MONTHLY_BASIS = 'monthly_basis',
   CLASS_BASIS = 'class_basis',
-  BOTH = 'both'
+  BOTH = 'both',
+  HOURLY_BASIS = 'hourly_basis'
+}
+
+export enum TeacherStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+  SUSPENDED = 'suspended',
+  RESIGNED = 'resigned',
+  ON_LEAVE = 'on_leave'
 }
 
 @Schema({
@@ -49,14 +60,14 @@ export enum AssignType {
   toObject: { virtuals: true },
 })
 export class Teacher {
-  @Prop({ required: true, trim: true })
+  @Prop({ required: true, trim: true, minlength: 2, maxlength: 100 })
   fullName: string;
 
-  @Prop({ trim: true })
-  fatherName?: string;
+  @Prop({ required: true, trim: true })
+  fatherName: string;
 
-  @Prop({ trim: true })
-  motherName?: string;
+  @Prop({ required: true, trim: true })
+  motherName: string;
 
   @Prop({ 
     type: String, 
@@ -78,8 +89,8 @@ export class Teacher {
   @Prop({ 
     required: true,
     validate: {
-      validator: (value: string) => /^\d{11}$/.test(value),
-      message: 'Contact number must be 11 digits'
+      validator: (value: string) => /^01[3-9]\d{8}$/.test(value),
+      message: 'Contact number must be a valid Bangladeshi number (11 digits starting with 01)'
     }
   })
   contactNumber: string;
@@ -87,8 +98,8 @@ export class Teacher {
   @Prop({ 
     required: true,
     validate: {
-      validator: (value: string) => /^\d{11}$/.test(value),
-      message: 'Emergency contact number must be 11 digits'
+      validator: (value: string) => /^01[3-9]\d{8}$/.test(value),
+      message: 'Emergency contact number must be a valid Bangladeshi number (11 digits starting with 01)'
     }
   })
   emergencyContactNumber: string;
@@ -100,12 +111,13 @@ export class Teacher {
   permanentAddress: string;
 
   @Prop({ 
+    required: true,
     validate: {
-      validator: (value: string) => !value || /^\d{11}$/.test(value),
-      message: 'WhatsApp number must be 11 digits'
+      validator: (value: string) => /^01[3-9]\d{8}$/.test(value),
+      message: 'WhatsApp number must be a valid Bangladeshi number (11 digits starting with 01)'
     }
   })
-  whatsappNumber?: string;
+  whatsappNumber: string;
 
   @Prop({ 
     required: true,
@@ -120,6 +132,8 @@ export class Teacher {
   email: string;
 
   @Prop({ 
+    lowercase: true,
+    trim: true,
     validate: {
       validator: (value: string) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
       message: 'Invalid email format'
@@ -128,23 +142,40 @@ export class Teacher {
   secondaryEmail?: string;
 
   @Prop({ 
+    required: true,
     unique: true,
-    sparse: true,
-    trim: true
+    trim: true,
+    validate: {
+      validator: (value: string) => /^\d{10,17}$/.test(value),
+      message: 'National ID must be 10-17 digits'
+    }
   })
-  nationalId?: string;
+  nationalId: string;
 
   @Prop({ 
     type: String, 
-    enum: BloodGroup 
+    enum: BloodGroup,
+    required: true
   })
-  bloodGroup?: BloodGroup;
+  bloodGroup: BloodGroup;
 
   @Prop()
   profilePicture?: string;
 
   // System Access
-  @Prop({ required: true })
+  @Prop({ 
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true,
+    validate: {
+      validator: (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+      message: 'Invalid email format'
+    }
+  })
+  systemEmail: string;
+
+  @Prop({ required: true, minlength: 6 })
   password: string;
 
   @Prop({ default: false })
@@ -203,11 +234,11 @@ export class Teacher {
 
   @Prop({ 
     type: String, 
-    enum: ['active', 'inactive', 'suspended', 'resigned'], 
-    default: 'active',
+    enum: TeacherStatus, 
+    default: TeacherStatus.ACTIVE,
     index: true 
   })
-  status: string;
+  status: TeacherStatus;
 
   @Prop({ default: true })
   isActive: boolean;
@@ -229,20 +260,20 @@ export class Teacher {
     default: null 
   })
   updatedBy?: Types.ObjectId | null;
-
-  // Virtual populate for referencing
-  createdByUser?: any;
-  updatedByUser?: any;
 }
 
 export const TeacherSchema = SchemaFactory.createForClass(Teacher);
 
 // Create indexes for better query performance
 TeacherSchema.index({ email: 1 }, { unique: true });
-TeacherSchema.index({ nationalId: 1 }, { unique: true, sparse: true });
+TeacherSchema.index({ systemEmail: 1 }, { unique: true });
+TeacherSchema.index({ nationalId: 1 }, { unique: true });
 TeacherSchema.index({ fullName: 1 });
 TeacherSchema.index({ contactNumber: 1 });
+TeacherSchema.index({ whatsappNumber: 1 });
 TeacherSchema.index({ status: 1, isActive: 1 });
+TeacherSchema.index({ designation: 1 });
+TeacherSchema.index({ assignType: 1 });
 TeacherSchema.index({ createdBy: 1 });
 TeacherSchema.index({ createdBy: 1, createdAt: -1 });
 
@@ -277,3 +308,13 @@ TeacherSchema.pre('save', async function(next) {
     next(error as Error);
   }
 });
+
+// Method to compare password
+TeacherSchema.methods.comparePassword = async function(candidatePassword: string): Promise<boolean> {
+  try {
+    const bcrypt = await import('bcrypt');
+    return await bcrypt.compare(candidatePassword, this.password);
+  } catch (error) {
+    return false;
+  }
+};

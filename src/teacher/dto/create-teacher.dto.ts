@@ -1,60 +1,77 @@
-// teacher/dto/create-teacher.dto.ts
 import { 
   IsString, IsEnum, IsDate, IsNumber, IsOptional, 
-  Min, Matches, IsBoolean, IsEmail, IsNotEmpty, 
-  MinLength, ValidateIf 
+  Min, Matches, IsBoolean, IsNotEmpty, IsEmail,
+  MinLength, MaxLength, IsDateString 
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Gender, Religion, BloodGroup, Designation, AssignType } from '../schemas/teacher.schema';
+import { 
+  Gender, 
+  Religion, 
+  BloodGroup, 
+  Designation, 
+  AssignType, 
+  TeacherStatus 
+} from '../schemas/teacher.schema';
 
 export class CreateTeacherDto {
   @IsString()
   @IsNotEmpty()
+  @MinLength(2)
+  @MaxLength(100)
   fullName: string;
 
-  @IsOptional()
   @IsString()
-  fatherName?: string;
+  @IsNotEmpty()
+  @MinLength(2)
+  fatherName: string;
 
-  @IsOptional()
   @IsString()
-  motherName?: string;
+  @IsNotEmpty()
+  @MinLength(2)
+  motherName: string;
 
-  @IsOptional()
   @IsEnum(Religion)
-  religion?: Religion;
+  @IsNotEmpty()
+  religion: Religion;
 
   @IsEnum(Gender)
   @IsNotEmpty()
   gender: Gender;
 
-  @Type(() => Date)
-  @IsDate()
+  @IsDateString()
   @IsNotEmpty()
-  dateOfBirth: Date;
+  dateOfBirth: string;
 
   @IsString()
-  @Matches(/^\d{11}$/)
   @IsNotEmpty()
+  @Matches(/^01[3-9]\d{8}$/, { 
+    message: 'Contact number must be a valid Bangladeshi number (11 digits starting with 01)' 
+  })
   contactNumber: string;
 
   @IsString()
-  @Matches(/^\d{11}$/)
   @IsNotEmpty()
+  @Matches(/^01[3-9]\d{8}$/, { 
+    message: 'Emergency contact number must be a valid Bangladeshi number (11 digits starting with 01)' 
+  })
   emergencyContactNumber: string;
 
   @IsString()
   @IsNotEmpty()
+  @MinLength(5)
   presentAddress: string;
 
   @IsString()
   @IsNotEmpty()
+  @MinLength(5)
   permanentAddress: string;
 
-  @IsOptional()
   @IsString()
-  @Matches(/^\d{11}$/)
-  whatsappNumber?: string;
+  @IsNotEmpty()
+  @Matches(/^01[3-9]\d{8}$/, { 
+    message: 'WhatsApp number must be a valid Bangladeshi number (11 digits starting with 01)' 
+  })
+  whatsappNumber: string;
 
   @IsEmail()
   @IsNotEmpty()
@@ -64,23 +81,41 @@ export class CreateTeacherDto {
   @IsEmail()
   secondaryEmail?: string;
 
-  @IsOptional()
   @IsString()
-  nationalId?: string;
+  @IsNotEmpty()
+  @Matches(/^\d{10,17}$/, { 
+    message: 'National ID must be 10-17 digits' 
+  })
+  nationalId: string;
 
-  @IsOptional()
   @IsEnum(BloodGroup)
-  bloodGroup?: BloodGroup;
+  @IsNotEmpty()
+  bloodGroup: BloodGroup;
 
   @IsOptional()
   @IsString()
   profilePicture?: string;
 
-  @IsString()
-  @MinLength(6)
+  // System Access
+  @IsEmail()
   @IsNotEmpty()
+  systemEmail: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(6)
+  @MaxLength(100)
   password: string;
 
+  @IsOptional()
+  @IsBoolean()
+  isEmailVerified?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isPhoneVerified?: boolean;
+
+  // Job Information
   @IsEnum(Designation)
   @IsNotEmpty()
   designation: Designation;
@@ -89,22 +124,30 @@ export class CreateTeacherDto {
   @IsNotEmpty()
   assignType: AssignType;
 
-  @ValidateIf(o => o.assignType === AssignType.MONTHLY_BASIS || o.assignType === AssignType.BOTH)
+  @IsOptional()
   @IsNumber()
   @Min(0)
   monthlyTotalClass?: number;
 
-  @ValidateIf(o => o.assignType === AssignType.MONTHLY_BASIS || o.assignType === AssignType.BOTH)
+  @IsOptional()
   @IsNumber()
   @Min(0)
   salary?: number;
 
-  @Type(() => Date)
-  @IsDate()
+  @IsDateString()
   @IsNotEmpty()
-  joiningDate: Date;
+  joiningDate: string;
+
+  @IsEnum(TeacherStatus)
+  @IsOptional()
+  status?: TeacherStatus;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   remarks?: string;
 }

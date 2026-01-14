@@ -1,8 +1,7 @@
-// teacher/teacher.controller.ts
 import { 
   Controller, Get, Post, Body, Patch, Param, Delete, 
   Query, UsePipes, ValidationPipe, HttpCode, HttpStatus,
-  Req, UseGuards 
+  Req, UseGuards, ParseIntPipe 
 } from '@nestjs/common';
 import { TeacherService } from './teacher.service';
 import { CreateTeacherDto } from './dto/create-teacher.dto';
@@ -15,6 +14,7 @@ import { UserRole } from 'src/shared/interfaces/user.interface';
 import { AuthExceptionFilter } from 'src/shared/filters/auth-exception.filter';
 import { UseFilters } from '@nestjs/common';
 import type { Request } from 'express';
+import { TeacherStatus } from './schemas/teacher.schema';
 
 @Controller('teachers')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -38,7 +38,38 @@ export class TeacherController {
 
   @Get()
   @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.STAFF)
-  async findAll(@Query() query: any): Promise<TeacherResponseDto[]> {
+  async findAll(
+    @Query('page', ParseIntPipe) page: number = 1,
+    @Query('limit', ParseIntPipe) limit: number = 10,
+    @Query('search') search?: string,
+    @Query('designation') designation?: string,
+    @Query('assignType') assignType?: string,
+    @Query('status') status?: TeacherStatus,
+    @Query('isActive') isActive?: string,
+    @Query('gender') gender?: string,
+    @Query('religion') religion?: string,
+    @Query('bloodGroup') bloodGroup?: string,
+    @Query('createdBy') createdBy?: string
+  ): Promise<{ 
+    teachers: TeacherResponseDto[]; 
+    total: number; 
+    page: number; 
+    limit: number; 
+    totalPages: number; 
+  }> {
+    const query = {
+      page,
+      limit,
+      search,
+      designation,
+      assignType,
+      status,
+      isActive,
+      gender,
+      religion,
+      bloodGroup,
+      createdBy
+    };
     return this.teacherService.findAll(query);
   }
 
@@ -79,7 +110,7 @@ export class TeacherController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.STAFF)
   async updateStatus(
     @Param('id') id: string,
-    @Body() body: { status: string; isActive: boolean },
+    @Body() body: { status: TeacherStatus; isActive: boolean },
     @Req() req: Request
   ): Promise<TeacherResponseDto> {
     const user = req.user as any;
@@ -133,13 +164,16 @@ export class TeacherController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.STAFF)
   async getMyTeachers(
     @Req() req: Request,
-    @Query('status') status?: string,
+    @Query('status') status?: TeacherStatus,
     @Query('isActive') isActive?: string,
     @Query('designation') designation?: string,
     @Query('assignType') assignType?: string,
+    @Query('gender') gender?: string,
+    @Query('religion') religion?: string,
+    @Query('bloodGroup') bloodGroup?: string,
     @Query('search') search?: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
+    @Query('page', ParseIntPipe) page: number = 1,
+    @Query('limit', ParseIntPipe) limit: number = 10,
   ): Promise<{
     teachers: TeacherResponseDto[];
     total: number;
@@ -157,12 +191,15 @@ export class TeacherController {
     if (isActive !== undefined) filters.isActive = isActive === 'true';
     if (designation) filters.designation = designation;
     if (assignType) filters.assignType = assignType;
+    if (gender) filters.gender = gender;
+    if (religion) filters.religion = religion;
+    if (bloodGroup) filters.bloodGroup = bloodGroup;
     if (search) filters.search = search;
 
     const result = await this.teacherService.getMyTeachers(
       user._id, 
       filters, 
-      { page: page || 1, limit: limit || 10 }
+      { page, limit }
     );
     
     return {
@@ -194,6 +231,24 @@ export class TeacherController {
       inactiveTeachers: total - active,
       verifiedEmail: statistics.verifiedEmail || 0,
       verifiedPhone: statistics.verifiedPhone || 0,
+      byDesignation: statistics.byDesignation || [],
+      byAssignType: statistics.byAssignType || [],
+      byStatus: statistics.byStatus || [],
+      byGender: statistics.byGender || [],
+      byReligion: statistics.byReligion || [],
+      byBloodGroup: statistics.byBloodGroup || [],
     };
   }
+
+  // @Get('search/by-national-id/:nationalId')
+  // @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.STAFF)
+  // async findByNationalId(
+  //   @Param('nationalId') nationalId: string
+  // ): Promise<TeacherResponseDto> {
+  //   const teacher = await this.teacherService.findOneByNationalId(nationalId);
+  //   if (!teacher) {
+  //     throw new NotFoundException(`Teacher with National ID ${nationalId} not found`);
+  //   }
+  //   return teacher;
+  // }
 }
