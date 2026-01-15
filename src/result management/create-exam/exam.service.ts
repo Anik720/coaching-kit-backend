@@ -1,3 +1,4 @@
+// src/result-management/exam/exam.service.ts
 import { 
   Injectable, 
   NotFoundException, 
@@ -7,14 +8,14 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Exam, ExamDocument } from './exam.schema';
+
 import { CreateExamDto } from './dto/create-exam.dto';
 import { UpdateExamDto } from './dto/update-exam.dto';
 import { ClassService } from 'src/AcademicFunction/class/class.service';
 import { BatchService } from 'src/AcademicFunction/btach/batch.service';
 import { SubjectService } from 'src/AcademicFunction/subject/subject.service';
 import { ExamCategoryService } from '../exam category/exam-category.service';
-
+import { Exam, ExamDocument } from './exam.schema';
 
 @Injectable()
 export class ExamService {
@@ -69,7 +70,6 @@ export class ExamService {
   async create(dto: CreateExamDto, userId: string) {
     console.log('=== Exam Creation Debug ===');
     console.log('Received userId:', userId);
-    console.log('Is valid ObjectId?', Types.ObjectId.isValid(userId));
     
     if (!Types.ObjectId.isValid(userId)) {
       console.log('ERROR: Invalid user ID format');
@@ -81,7 +81,7 @@ export class ExamService {
 
     // Check for duplicate exam name within same class and subject
     const existingExam = await this.examModel.findOne({ 
-      examName: dto.examName,
+      examName: dto.examName.trim(),
       class: new Types.ObjectId(dto.classId),
       subject: new Types.ObjectId(dto.subjectId)
     }).exec();
@@ -91,42 +91,25 @@ export class ExamService {
       throw new ConflictException('Exam with this name already exists for this class and subject');
     }
 
-    // Validate mark titles total equals total marks if provided
-    if (dto.markTitles && dto.markTitles.length > 0) {
-      const markTitlesTotal = dto.markTitles.reduce((sum, title) => sum + title.marks, 0);
-      if (markTitlesTotal !== dto.totalMarks) {
-        throw new BadRequestException('Sum of mark titles must equal total marks');
-      }
+    // Validate pass marks don't exceed total marks
+    if (dto.passMarks !== undefined && dto.passMarks > dto.totalMarks) {
+      throw new BadRequestException('Pass marks cannot exceed total marks');
     }
 
-    // Validate grades if grading is enabled
-    if (dto.enableGrading) {
-      if (!dto.grades || dto.grades.length === 0) {
-        throw new BadRequestException('Grades configuration is required when grading is enabled');
-      }
-      
-      // Validate pass marks percentage
-      if (!dto.passMarksPercentage && dto.passMarksPercentage !== 0) {
-        throw new BadRequestException('Pass marks percentage is required when grading is enabled');
-      }
+    // Validate grading options
+    if (dto.enableGrading && dto.passMarks === undefined) {
+      throw new BadRequestException('Pass marks are required when grading is enabled');
+    }
 
-      // Validate grades cover 0-100%
-      let minCoverage = 100;
-      let maxCoverage = 0;
-      
-      for (const grade of dto.grades) {
-        if (grade.minPercentage > grade.maxPercentage) {
-          throw new BadRequestException(`Grade ${grade.grade}: minPercentage cannot be greater than maxPercentage`);
-        }
-        
-        minCoverage = Math.min(minCoverage, grade.minPercentage);
-        maxCoverage = Math.max(maxCoverage, grade.maxPercentage);
-        
-        // Check for grade overlaps (this would need more sophisticated validation)
-      }
-      
-      if (minCoverage > 0 || maxCoverage < 100) {
-        throw new BadRequestException('Grades must cover the entire percentage range from 0 to 100');
+    // Validate marks fields selection when showMarksTitle is true
+    if (dto.showMarksTitle && (!dto.selectedMarksFields || dto.selectedMarksFields.length === 0)) {
+      throw new BadRequestException('At least one marks field must be selected when Show Marks Title is enabled');
+    }
+
+    // Validate grading display options
+    if (dto.enableGrading) {
+      if (!dto.showPercentageInResult && !dto.showGPAInResult) {
+        throw new BadRequestException('At least one grading display option must be selected when grading is enabled');
       }
     }
 
@@ -134,21 +117,23 @@ export class ExamService {
     console.log('Converted to ObjectId:', userObjectId);
 
     const newExam = new this.examModel({
-      examName: dto.examName,
-      topicName: dto.topicName,
+      examName: dto.examName.trim(),
+      topicName: dto.topicName?.trim() || '',
       class: new Types.ObjectId(dto.classId),
       batches: dto.batchIds.map(id => new Types.ObjectId(id)),
       subject: new Types.ObjectId(dto.subjectId),
       examCategory: new Types.ObjectId(dto.examCategoryId),
       examDate: dto.examDate,
       showMarksTitle: dto.showMarksTitle || false,
-      markTitles: dto.markTitles || [],
+      selectedMarksFields: dto.selectedMarksFields || [],
       totalMarks: dto.totalMarks,
       enableGrading: dto.enableGrading || false,
-      passMarksPercentage: dto.passMarksPercentage,
-      grades: dto.grades || [],
-      instructions: dto.instructions,
-      duration: dto.duration,
+      passMarks: dto.passMarks,
+      showPercentageInResult: dto.showPercentageInResult || false,
+      showGPAInResult: dto.showGPAInResult || false,
+      useGPASystem: dto.useGPASystem || false,
+      instructions: dto.instructions || '',
+      duration: dto.duration || 180,
       isActive: dto.isActive !== undefined ? dto.isActive : true,
       createdBy: userObjectId
     });
@@ -299,7 +284,7 @@ export class ExamService {
     // Check for duplicate exam name if updating
     if (dto.examName) {
       const duplicateExam = await this.examModel.findOne({ 
-        examName: dto.examName,
+        examName: dto.examName.trim(),
         class: dto.classId ? new Types.ObjectId(dto.classId) : existingExam.class,
         subject: dto.subjectId ? new Types.ObjectId(dto.subjectId) : existingExam.subject,
         _id: { $ne: id }
@@ -310,45 +295,55 @@ export class ExamService {
       }
     }
 
-    // Validate mark titles if provided
-    if (dto.markTitles && dto.markTitles.length > 0) {
-      const totalMarks = dto.totalMarks || existingExam.totalMarks;
-      const markTitlesTotal = dto.markTitles.reduce((sum, title) => sum + title.marks, 0);
-      if (markTitlesTotal !== totalMarks) {
-        throw new BadRequestException('Sum of mark titles must equal total marks');
+    // Validate pass marks don't exceed total marks
+    const totalMarks = dto.totalMarks || existingExam.totalMarks;
+    if (dto.passMarks !== undefined && dto.passMarks > totalMarks) {
+      throw new BadRequestException('Pass marks cannot exceed total marks');
+    }
+
+    // Validate grading options
+    if (dto.enableGrading !== undefined ? dto.enableGrading : existingExam.enableGrading) {
+      const passMarks = dto.passMarks !== undefined ? dto.passMarks : existingExam.passMarks;
+      if (passMarks === undefined) {
+        throw new BadRequestException('Pass marks are required when grading is enabled');
       }
     }
 
-    // Validate grades if grading is enabled or being enabled
-    if (dto.enableGrading || (dto.enableGrading === undefined && existingExam.enableGrading)) {
-      const grades = dto.grades || existingExam.grades;
-      const passMarksPercentage = dto.passMarksPercentage !== undefined ? dto.passMarksPercentage : existingExam.passMarksPercentage;
+    // Validate marks fields selection when showMarksTitle is true
+    const showMarksTitle = dto.showMarksTitle !== undefined ? dto.showMarksTitle : existingExam.showMarksTitle;
+    const selectedMarksFields = dto.selectedMarksFields || existingExam.selectedMarksFields;
+    if (showMarksTitle && (!selectedMarksFields || selectedMarksFields.length === 0)) {
+      throw new BadRequestException('At least one marks field must be selected when Show Marks Title is enabled');
+    }
+
+    // Validate grading display options
+    if (dto.enableGrading !== undefined ? dto.enableGrading : existingExam.enableGrading) {
+      const showPercentageInResult = dto.showPercentageInResult !== undefined ? dto.showPercentageInResult : existingExam.showPercentageInResult;
+      const showGPAInResult = dto.showGPAInResult !== undefined ? dto.showGPAInResult : existingExam.showGPAInResult;
       
-      if (!grades || grades.length === 0) {
-        throw new BadRequestException('Grades configuration is required when grading is enabled');
-      }
-      
-      if (passMarksPercentage === undefined || passMarksPercentage === null) {
-        throw new BadRequestException('Pass marks percentage is required when grading is enabled');
+      if (!showPercentageInResult && !showGPAInResult) {
+        throw new BadRequestException('At least one grading display option must be selected when grading is enabled');
       }
     }
 
     const updateData: any = {};
     
     // Update fields if provided
-    if (dto.examName !== undefined) updateData.examName = dto.examName;
-    if (dto.topicName !== undefined) updateData.topicName = dto.topicName;
+    if (dto.examName !== undefined) updateData.examName = dto.examName.trim();
+    if (dto.topicName !== undefined) updateData.topicName = dto.topicName?.trim() || '';
     if (dto.classId !== undefined) updateData.class = new Types.ObjectId(dto.classId);
     if (dto.batchIds !== undefined) updateData.batches = dto.batchIds.map(id => new Types.ObjectId(id));
     if (dto.subjectId !== undefined) updateData.subject = new Types.ObjectId(dto.subjectId);
     if (dto.examCategoryId !== undefined) updateData.examCategory = new Types.ObjectId(dto.examCategoryId);
     if (dto.examDate !== undefined) updateData.examDate = dto.examDate;
     if (dto.showMarksTitle !== undefined) updateData.showMarksTitle = dto.showMarksTitle;
-    if (dto.markTitles !== undefined) updateData.markTitles = dto.markTitles;
+    if (dto.selectedMarksFields !== undefined) updateData.selectedMarksFields = dto.selectedMarksFields;
     if (dto.totalMarks !== undefined) updateData.totalMarks = dto.totalMarks;
     if (dto.enableGrading !== undefined) updateData.enableGrading = dto.enableGrading;
-    if (dto.passMarksPercentage !== undefined) updateData.passMarksPercentage = dto.passMarksPercentage;
-    if (dto.grades !== undefined) updateData.grades = dto.grades;
+    if (dto.passMarks !== undefined) updateData.passMarks = dto.passMarks;
+    if (dto.showPercentageInResult !== undefined) updateData.showPercentageInResult = dto.showPercentageInResult;
+    if (dto.showGPAInResult !== undefined) updateData.showGPAInResult = dto.showGPAInResult;
+    if (dto.useGPASystem !== undefined) updateData.useGPASystem = dto.useGPASystem;
     if (dto.instructions !== undefined) updateData.instructions = dto.instructions;
     if (dto.duration !== undefined) updateData.duration = dto.duration;
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
@@ -440,7 +435,7 @@ export class ExamService {
         examDate: exam.examDate,
         totalMarks: exam.totalMarks,
         enableGrading: exam.enableGrading,
-        passMarksPercentage: exam.passMarksPercentage,
+        passMarks: exam.passMarks,
         isActive: exam.isActive,
       },
       statistics: stats,
@@ -658,5 +653,54 @@ export class ExamService {
       createdBy: new Types.ObjectId(userId),
       isActive: true 
     }).exec();
+  }
+
+  // Get exam details for result entry setup
+  async getExamResultSetup(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid exam ID');
+    }
+
+    const exam = await this.examModel
+      .findById(id)
+      .populate('class', 'classname')
+      .populate('batches', 'batchName sessionYear')
+      .populate('subject', 'subjectName')
+      .exec();
+    
+    if (!exam) {
+      throw new NotFoundException('Exam not found');
+    }
+
+    // Calculate student count (you would implement this based on your student-batch relationship)
+    let studentCount = 0;
+    // For each batch in exam.batches, count students
+    
+    // Check if results already exist for this exam
+    let resultEntryStatus = 'not_started';
+    let resultsEntered = 0;
+    
+    return {
+      exam: {
+        _id: exam._id,
+        examName: exam.examName,
+        topicName: exam.topicName,
+        class: exam.class,
+        batches: exam.batches,
+        subject: exam.subject,
+        examDate: exam.examDate,
+        showMarksTitle: exam.showMarksTitle,
+        selectedMarksFields: exam.selectedMarksFields,
+        totalMarks: exam.totalMarks,
+        enableGrading: exam.enableGrading,
+        passMarks: exam.passMarks,
+        showPercentageInResult: exam.showPercentageInResult,
+        showGPAInResult: exam.showGPAInResult,
+        useGPASystem: exam.useGPASystem,
+      },
+      studentCount,
+      resultEntryStatus,
+      resultsEntered,
+    };
   }
 }

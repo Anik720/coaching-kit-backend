@@ -1,3 +1,4 @@
+// src/result-management/exam/dto/update-exam.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import { 
   IsString, 
@@ -9,19 +10,21 @@ import {
   IsMongoId,
   Min,
   Max,
-  ValidateNested,
-  ArrayMinSize
+  ArrayMinSize,
+  IsIn
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { MarkTitleDto, GradeDto } from './create-exam.dto'; // Add this import
+
+// Valid marks fields
+const VALID_MARKS_FIELDS = ['mcq', 'cq', 'written'];
 
 export class UpdateExamDto {
-  @ApiProperty({ example: 'Test Xitu Updated', description: 'Updated name of the exam', required: false })
+  @ApiProperty({ example: 'Updated Exam Name', description: 'Updated name of the exam', required: false })
   @IsString()
   @IsOptional()
   examName?: string;
 
-  @ApiProperty({ example: 'Test Fire Updated', description: 'Updated topic name', required: false })
+  @ApiProperty({ example: 'Updated Topic', description: 'Updated topic name', required: false })
   @IsString()
   @IsOptional()
   topicName?: string;
@@ -59,7 +62,7 @@ export class UpdateExamDto {
   examDate?: Date;
 
   @ApiProperty({ 
-    example: false, 
+    example: true, 
     description: 'Updated show marks title setting',
     required: false 
   })
@@ -68,27 +71,25 @@ export class UpdateExamDto {
   showMarksTitle?: boolean;
 
   @ApiProperty({ 
-    example: [
-      { title: 'Theory', marks: 40, passMarks: 20 },
-      { title: 'Practical', marks: 60, passMarks: 30 }
-    ], 
-    description: 'Updated mark titles configuration',
-    required: false 
+    example: ['mcq', 'cq'], 
+    description: 'Updated selected marks fields',
+    required: false,
+    enum: VALID_MARKS_FIELDS
   })
   @IsArray()
   @IsOptional()
-  @ValidateNested({ each: true })
-  @Type(() => MarkTitleDto)
-  markTitles?: MarkTitleDto[];
+  @IsIn(VALID_MARKS_FIELDS, { each: true })
+  selectedMarksFields?: string[];
 
-  @ApiProperty({ example: 120, description: 'Updated total marks', minimum: 0, required: false })
+  @ApiProperty({ example: 120, description: 'Updated total marks', minimum: 1, maximum: 1000, required: false })
   @IsNumber()
   @IsOptional()
-  @Min(0)
+  @Min(1)
+  @Max(1000)
   totalMarks?: number;
 
   @ApiProperty({ 
-    example: false, 
+    example: true, 
     description: 'Updated grading system setting',
     required: false 
   })
@@ -96,26 +97,43 @@ export class UpdateExamDto {
   @IsOptional()
   enableGrading?: boolean;
 
-  @ApiProperty({ example: 40, description: 'Updated pass marks percentage', minimum: 0, maximum: 100, required: false })
+  @ApiProperty({ 
+    example: 45, 
+    description: 'Updated pass marks',
+    minimum: 0,
+    required: false 
+  })
   @IsNumber()
   @IsOptional()
   @Min(0)
-  @Max(100)
-  passMarksPercentage?: number;
+  passMarks?: number;
 
   @ApiProperty({ 
-    example: [
-      { grade: 'A+', description: 'Outstanding', minPercentage: 90, maxPercentage: 100 },
-      { grade: 'A', description: 'Excellent', minPercentage: 80, maxPercentage: 89 }
-    ], 
-    description: 'Updated grading configuration',
+    example: true, 
+    description: 'Updated show percentage in result',
     required: false 
   })
-  @IsArray()
+  @IsBoolean()
   @IsOptional()
-  @ValidateNested({ each: true })
-  @Type(() => GradeDto)
-  grades?: GradeDto[];
+  showPercentageInResult?: boolean;
+
+  @ApiProperty({ 
+    example: false, 
+    description: 'Updated show GPA in result',
+    required: false 
+  })
+  @IsBoolean()
+  @IsOptional()
+  showGPAInResult?: boolean;
+
+  @ApiProperty({ 
+    example: true, 
+    description: 'Updated use GPA system',
+    required: false 
+  })
+  @IsBoolean()
+  @IsOptional()
+  useGPASystem?: boolean;
 
   @ApiProperty({ 
     example: 'Updated instructions for the exam', 

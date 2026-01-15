@@ -1,3 +1,4 @@
+// src/result-management/exam/exam.controller.ts
 import {
   Controller,
   Get,
@@ -53,8 +54,8 @@ export class ExamController {
     schema: {
       example: {
         _id: '507f1f77bcf86cd799439011',
-        examName: 'Test Xitu',
-        topicName: 'Test Fire',
+        examName: 'Mid-Term Examination 2025',
+        topicName: 'Algebra & Geometry',
         class: {
           _id: '507f1f77bcf86cd799439021',
           classname: 'Class 10',
@@ -78,18 +79,13 @@ export class ExamController {
         },
         examDate: '2024-12-25T00:00:00.000Z',
         showMarksTitle: true,
-        markTitles: [
-          { title: 'MCQ', marks: 20, passMarks: 10 },
-          { title: 'CQ', marks: 30, passMarks: 15 },
-          { title: 'Written', marks: 50, passMarks: 25 }
-        ],
+        selectedMarksFields: ['mcq', 'cq', 'written'],
         totalMarks: 100,
         enableGrading: true,
-        passMarksPercentage: 33,
-        grades: [
-          { grade: 'A+', description: 'Excellent', minPercentage: 80, maxPercentage: 100 },
-          { grade: 'A', description: 'Very Good', minPercentage: 70, maxPercentage: 79 }
-        ],
+        passMarks: 40,
+        showPercentageInResult: true,
+        showGPAInResult: false,
+        useGPASystem: false,
         instructions: 'Bring calculator and geometry set',
         duration: 180,
         isActive: true,
@@ -113,7 +109,7 @@ export class ExamController {
         message: [
           'examName must be a string',
           'classId must be a mongodb id',
-          'Sum of mark titles must equal total marks'
+          'Pass marks cannot exceed total marks'
         ],
         error: 'Bad Request',
       },
@@ -246,8 +242,8 @@ export class ExamController {
         data: [
           {
             _id: '507f1f77bcf86cd799439011',
-            examName: 'Test Xitu',
-            topicName: 'Test Fire',
+            examName: 'Mid-Term Examination 2025',
+            topicName: 'Algebra & Geometry',
             class: {
               _id: '507f1f77bcf86cd799439021',
               classname: 'Class 10',
@@ -270,8 +266,14 @@ export class ExamController {
               categoryName: 'Quarterly Exams'
             },
             examDate: '2024-12-25T00:00:00.000Z',
+            showMarksTitle: true,
+            selectedMarksFields: ['mcq', 'cq', 'written'],
             totalMarks: 100,
             enableGrading: true,
+            passMarks: 40,
+            showPercentageInResult: true,
+            showGPAInResult: false,
+            useGPASystem: false,
             isActive: true,
             createdBy: {
               _id: '507f1f77bcf86cd799439025',
@@ -335,8 +337,8 @@ export class ExamController {
     schema: {
       example: {
         _id: '507f1f77bcf86cd799439011',
-        examName: 'Test Xitu',
-        topicName: 'Test Fire',
+        examName: 'Mid-Term Examination 2025',
+        topicName: 'Algebra & Geometry',
         class: {
           _id: '507f1f77bcf86cd799439021',
           classname: 'Class 10',
@@ -364,18 +366,13 @@ export class ExamController {
         },
         examDate: '2024-12-25T00:00:00.000Z',
         showMarksTitle: true,
-        markTitles: [
-          { title: 'MCQ', marks: 20, passMarks: 10 },
-          { title: 'CQ', marks: 30, passMarks: 15 },
-          { title: 'Written', marks: 50, passMarks: 25 }
-        ],
+        selectedMarksFields: ['mcq', 'cq', 'written'],
         totalMarks: 100,
         enableGrading: true,
-        passMarksPercentage: 33,
-        grades: [
-          { grade: 'A+', description: 'Excellent', minPercentage: 80, maxPercentage: 100 },
-          { grade: 'A', description: 'Very Good', minPercentage: 70, maxPercentage: 79 }
-        ],
+        passMarks: 40,
+        showPercentageInResult: true,
+        showGPAInResult: false,
+        useGPASystem: false,
         instructions: 'Bring calculator and geometry set',
         duration: 180,
         isActive: true,
@@ -419,8 +416,8 @@ export class ExamController {
     schema: {
       example: {
         _id: '507f1f77bcf86cd799439011',
-        examName: 'Test Xitu Updated',
-        topicName: 'Test Fire Updated',
+        examName: 'Updated Mid-Term Examination 2025',
+        topicName: 'Updated Algebra & Geometry',
         class: {
           _id: '507f1f77bcf86cd799439021',
           classname: 'Class 10',
@@ -449,17 +446,13 @@ export class ExamController {
         },
         examDate: '2024-12-26T00:00:00.000Z',
         showMarksTitle: false,
-        markTitles: [
-          { title: 'Theory', marks: 40, passMarks: 20 },
-          { title: 'Practical', marks: 60, passMarks: 30 }
-        ],
-        totalMarks: 100,
-        enableGrading: true,
-        passMarksPercentage: 40,
-        grades: [
-          { grade: 'A+', description: 'Outstanding', minPercentage: 90, maxPercentage: 100 },
-          { grade: 'A', description: 'Excellent', minPercentage: 80, maxPercentage: 89 }
-        ],
+        selectedMarksFields: [],
+        totalMarks: 120,
+        enableGrading: false,
+        passMarks: null,
+        showPercentageInResult: false,
+        showGPAInResult: false,
+        useGPASystem: false,
         instructions: 'Updated instructions',
         duration: 150,
         isActive: true,
@@ -551,8 +544,8 @@ export class ExamController {
       example: {
         exam: {
           _id: '507f1f77bcf86cd799439011',
-          examName: 'Test Xitu',
-          topicName: 'Test Fire',
+          examName: 'Mid-Term Examination 2025',
+          topicName: 'Algebra & Geometry',
           class: {
             _id: '507f1f77bcf86cd799439021',
             classname: 'Class 10'
@@ -574,7 +567,7 @@ export class ExamController {
           examDate: '2024-12-25T00:00:00.000Z',
           totalMarks: 100,
           enableGrading: true,
-          passMarksPercentage: 33,
+          passMarks: 40,
           isActive: true,
         },
         statistics: {
@@ -611,7 +604,7 @@ export class ExamController {
     schema: {
       example: {
         _id: '507f1f77bcf86cd799439011',
-        examName: 'Test Xitu',
+        examName: 'Mid-Term Examination 2025',
         isActive: false,
         class: {
           _id: '507f1f77bcf86cd799439021',
@@ -706,8 +699,8 @@ export class ExamController {
         data: [
           {
             _id: '507f1f77bcf86cd799439011',
-            examName: 'Test Xitu',
-            topicName: 'Test Fire',
+            examName: 'Mid-Term Examination 2025',
+            topicName: 'Algebra & Geometry',
             class: {
               _id: '507f1f77bcf86cd799439021',
               classname: 'Class 10'
@@ -827,8 +820,8 @@ export class ExamController {
       example: [
         {
           _id: '507f1f77bcf86cd799439011',
-          examName: 'Test Xitu',
-          topicName: 'Test Fire',
+          examName: 'Mid-Term Examination 2025',
+          topicName: 'Algebra & Geometry',
           class: {
             _id: '507f1f77bcf86cd799439021',
             classname: 'Class 10'
@@ -868,20 +861,6 @@ export class ExamController {
     return this.examService.getUpcomingExamsForStudent(user._id, limit || 10);
   }
 
-  @Get('debug/user-info')
-  @UseGuards(JwtAuthGuard)
-  debugUserInfo(@Req() req: Request) {
-    const user = req.user as any;
-    return {
-      message: 'Debug user information',
-      user: user,
-      userId: user?._id,
-      userType: typeof user?._id,
-      isObjectId: require('mongoose').Types.ObjectId.isValid(user?._id)
-    };
-  }
-
-  // New endpoint to get exam details for result entry
   @Get(':id/result-setup')
   @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.TEACHER)
   @ApiOperation({ summary: 'Get exam details for result entry setup' })
@@ -897,8 +876,8 @@ export class ExamController {
       example: {
         exam: {
           _id: '507f1f77bcf86cd799439011',
-          examName: 'Test Xitu',
-          topicName: 'Test Fire',
+          examName: 'Mid-Term Examination 2025',
+          topicName: 'Algebra & Geometry',
           class: {
             _id: '507f1f77bcf86cd799439021',
             classname: 'Class 10'
@@ -916,55 +895,34 @@ export class ExamController {
           },
           examDate: '2024-12-25T00:00:00.000Z',
           showMarksTitle: true,
-          markTitles: [
-            { title: 'MCQ', marks: 20, passMarks: 10 },
-            { title: 'CQ', marks: 30, passMarks: 15 },
-            { title: 'Written', marks: 50, passMarks: 25 }
-          ],
+          selectedMarksFields: ['mcq', 'cq', 'written'],
           totalMarks: 100,
           enableGrading: true,
-          passMarksPercentage: 33,
-          grades: [
-            { grade: 'A+', description: 'Excellent', minPercentage: 80, maxPercentage: 100 },
-            { grade: 'A', description: 'Very Good', minPercentage: 70, maxPercentage: 79 }
-          ],
+          passMarks: 40,
+          showPercentageInResult: true,
+          showGPAInResult: false,
+          useGPASystem: false,
         },
-        studentCount: 45, // Total students in the batches
-        resultEntryStatus: 'not_started', // not_started, in_progress, completed
+        studentCount: 45,
+        resultEntryStatus: 'not_started',
         resultsEntered: 0,
       },
     },
   })
   async getExamResultSetup(@Param('id') id: string) {
-    const exam = await this.examService.findOne(id);
-    
-    // Calculate student count (you would implement this based on your student-batch relationship)
-    let studentCount = 0;
-    // For each batch in exam.batches, count students
-    
-    // Check if results already exist for this exam
-    let resultEntryStatus = 'not_started';
-    let resultsEntered = 0;
-    
+    return this.examService.getExamResultSetup(id);
+  }
+
+  @Get('debug/user-info')
+  @UseGuards(JwtAuthGuard)
+  debugUserInfo(@Req() req: Request) {
+    const user = req.user as any;
     return {
-      exam: {
-        _id: exam._id,
-        examName: exam.examName,
-        topicName: exam.topicName,
-        class: exam.class,
-        batches: exam.batches,
-        subject: exam.subject,
-        examDate: exam.examDate,
-        showMarksTitle: exam.showMarksTitle,
-        markTitles: exam.markTitles,
-        totalMarks: exam.totalMarks,
-        enableGrading: exam.enableGrading,
-        passMarksPercentage: exam.passMarksPercentage,
-        grades: exam.grades,
-      },
-      studentCount,
-      resultEntryStatus,
-      resultsEntered,
+      message: 'Debug user information',
+      user: user,
+      userId: user?._id,
+      userType: typeof user?._id,
+      isObjectId: require('mongoose').Types.ObjectId.isValid(user?._id)
     };
   }
 }

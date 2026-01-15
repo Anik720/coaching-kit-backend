@@ -1,3 +1,4 @@
+// src/result-management/exam/dto/create-exam.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import { 
   IsString, 
@@ -10,63 +11,25 @@ import {
   IsMongoId,
   Min,
   Max,
-  ValidateNested,
-  ArrayMinSize
+  ArrayMinSize,
+  ArrayContains,
+  IsIn
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class MarkTitleDto {
-  @ApiProperty({ example: 'MCQ', description: 'Title for marks section' })
-  @IsString()
-  @IsNotEmpty()
-  title: string;
-
-  @ApiProperty({ example: 20, description: 'Marks for this section', minimum: 0 })
-  @IsNumber()
-  @Min(0)
-  marks: number;
-
-  @ApiProperty({ example: 10, description: 'Pass marks for this section', minimum: 0, required: false })
-  @IsNumber()
-  @IsOptional()
-  @Min(0)
-  passMarks?: number;
-}
-
-export class GradeDto {
-  @ApiProperty({ example: 'A+', description: 'Grade name' })
-  @IsString()
-  @IsNotEmpty()
-  grade: string;
-
-  @ApiProperty({ example: 'Excellent', description: 'Grade description', required: false })
-  @IsString()
-  @IsOptional()
-  description?: string;
-
-  @ApiProperty({ example: 80, description: 'Minimum percentage for this grade', minimum: 0, maximum: 100 })
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  minPercentage: number;
-
-  @ApiProperty({ example: 100, description: 'Maximum percentage for this grade', minimum: 0, maximum: 100 })
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  maxPercentage: number;
-}
+// Valid marks fields
+const VALID_MARKS_FIELDS = ['mcq', 'cq', 'written'];
 
 export class CreateExamDto {
-  @ApiProperty({ example: 'Test Xitu', description: 'Name of the exam' })
+  @ApiProperty({ example: 'Mid-Term Examination 2025', description: 'Name of the exam' })
   @IsString()
   @IsNotEmpty()
   examName: string;
 
-  @ApiProperty({ example: 'Test Fire', description: 'Topic name for the exam' })
+  @ApiProperty({ example: 'Algebra & Geometry', description: 'Topic name for the exam', required: false })
   @IsString()
-  @IsNotEmpty()
-  topicName: string;
+  @IsOptional()
+  topicName?: string;
 
   @ApiProperty({ example: '507f1f77bcf86cd799439011', description: 'Class ID' })
   @IsMongoId()
@@ -96,7 +59,7 @@ export class CreateExamDto {
 
   @ApiProperty({ 
     example: true, 
-    description: 'Show marks title in result PDF',
+    description: 'Show marks title (MCQ, CQ, Written) in Result PDF',
     default: false 
   })
   @IsBoolean()
@@ -104,23 +67,20 @@ export class CreateExamDto {
   showMarksTitle?: boolean;
 
   @ApiProperty({ 
-    example: [
-      { title: 'MCQ', marks: 20, passMarks: 10 },
-      { title: 'CQ', marks: 30, passMarks: 15 },
-      { title: 'Written', marks: 50, passMarks: 25 }
-    ], 
-    description: 'Mark titles configuration',
-    required: false 
+    example: ['mcq', 'cq', 'written'], 
+    description: 'Selected marks fields',
+    required: false,
+    enum: VALID_MARKS_FIELDS
   })
   @IsArray()
   @IsOptional()
-  @ValidateNested({ each: true })
-  @Type(() => MarkTitleDto)
-  markTitles?: MarkTitleDto[];
+  @IsIn(VALID_MARKS_FIELDS, { each: true })
+  selectedMarksFields?: string[];
 
-  @ApiProperty({ example: 100, description: 'Total marks for the exam', minimum: 0 })
+  @ApiProperty({ example: 100, description: 'Total marks for the exam', minimum: 1, maximum: 1000 })
   @IsNumber()
-  @Min(0)
+  @Min(1)
+  @Max(1000)
   totalMarks: number;
 
   @ApiProperty({ 
@@ -132,30 +92,43 @@ export class CreateExamDto {
   @IsOptional()
   enableGrading?: boolean;
 
-  @ApiProperty({ example: 33, description: 'Pass marks percentage', minimum: 0, maximum: 100, required: false })
+  @ApiProperty({ 
+    example: 40, 
+    description: 'Pass marks (absolute value, not percentage)',
+    minimum: 0,
+    required: false 
+  })
   @IsNumber()
   @IsOptional()
   @Min(0)
-  @Max(100)
-  passMarksPercentage?: number;
+  passMarks?: number;
 
   @ApiProperty({ 
-    example: [
-      { grade: 'A+', description: 'Excellent', minPercentage: 80, maxPercentage: 100 },
-      { grade: 'A', description: 'Very Good', minPercentage: 70, maxPercentage: 79 },
-      { grade: 'B', description: 'Good', minPercentage: 60, maxPercentage: 69 },
-      { grade: 'C', description: 'Satisfactory', minPercentage: 50, maxPercentage: 59 },
-      { grade: 'D', description: 'Pass', minPercentage: 33, maxPercentage: 49 },
-      { grade: 'F', description: 'Fail', minPercentage: 0, maxPercentage: 32 }
-    ], 
-    description: 'Grading configuration',
-    required: false 
+    example: true, 
+    description: 'Include % marks in result reports',
+    default: false 
   })
-  @IsArray()
+  @IsBoolean()
   @IsOptional()
-  @ValidateNested({ each: true })
-  @Type(() => GradeDto)
-  grades?: GradeDto[];
+  showPercentageInResult?: boolean;
+
+  @ApiProperty({ 
+    example: false, 
+    description: 'Include GPA grading in result reports',
+    default: false 
+  })
+  @IsBoolean()
+  @IsOptional()
+  showGPAInResult?: boolean;
+
+  @ApiProperty({ 
+    example: false, 
+    description: 'Use GPA system for grading',
+    default: false 
+  })
+  @IsBoolean()
+  @IsOptional()
+  useGPASystem?: boolean;
 
   @ApiProperty({ 
     example: 'Additional instructions for the exam', 
@@ -167,9 +140,10 @@ export class CreateExamDto {
   instructions?: string;
 
   @ApiProperty({ 
-    example: 120, 
+    example: 180, 
     description: 'Exam duration in minutes',
-    required: false 
+    required: false,
+    default: 180 
   })
   @IsNumber()
   @IsOptional()

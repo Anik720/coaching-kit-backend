@@ -1,30 +1,9 @@
+// src/result-management/exam/schemas/exam.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
-class MarkTitle {
-  @Prop({ required: true })
-  title: string;
-
-  @Prop({ required: true, min: 0 })
-  marks: number;
-
-  @Prop({ min: 0, default: null })
-  passMarks?: number;
-}
-
-class Grade {
-  @Prop({ required: true })
-  grade: string;
-
-  @Prop({ default: null })
-  description?: string;
-
-  @Prop({ required: true, min: 0, max: 100 })
-  minPercentage: number;
-
-  @Prop({ required: true, min: 0, max: 100 })
-  maxPercentage: number;
-}
+// Removed complex MarkTitle and Grade classes
+// Using simpler approach with predefined marks fields
 
 export type ExamDocument = Exam & Document;
 
@@ -54,8 +33,8 @@ export class Exam {
   @Prop({ default: false })
   showMarksTitle: boolean;
 
-  @Prop({ type: [MarkTitle], default: [] })
-  markTitles: MarkTitle[];
+  @Prop({ type: [String], default: [] })
+  selectedMarksFields: string[]; // ['mcq', 'cq', 'written']
 
   @Prop({ required: true, min: 0 })
   totalMarks: number;
@@ -63,11 +42,17 @@ export class Exam {
   @Prop({ default: false })
   enableGrading: boolean;
 
-  @Prop({ min: 0, max: 100, default: null })
-  passMarksPercentage?: number;
+  @Prop({ min: 0, default: null })
+  passMarks?: number; // Changed from passMarksPercentage
 
-  @Prop({ type: [Grade], default: [] })
-  grades: Grade[];
+  @Prop({ default: false })
+  showPercentageInResult: boolean;
+
+  @Prop({ default: false })
+  showGPAInResult: boolean;
+
+  @Prop({ default: false })
+  useGPASystem: boolean;
 
   @Prop({ default: null })
   instructions?: string;
