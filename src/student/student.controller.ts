@@ -40,6 +40,7 @@ export class StudentController {
   async findAll(@Query() query: any): Promise<StudentResponseDto[]> {
     return this.studentService.findAll(query);
   }
+  
 
   @Get(':id')
   @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.STAFF)
