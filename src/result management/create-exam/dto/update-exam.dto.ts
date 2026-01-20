@@ -7,16 +7,46 @@ import {
   IsNumber, 
   IsBoolean, 
   IsOptional, 
-  IsMongoId,
   Min,
   Max,
-  ArrayMinSize,
-  IsIn
+  ValidateNested,
+  IsNotEmpty
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-// Valid marks fields
-const VALID_MARKS_FIELDS = ['mcq', 'cq', 'written'];
+class MarksFieldDto {
+  @ApiProperty({ example: 'mcq', description: 'Type of marks field' })
+  @IsString()
+  @IsNotEmpty()
+  type: string;
+
+  @ApiProperty({ example: 30, description: 'Total marks for this field' })
+  @IsNumber()
+  @Min(0)
+  @Max(1000)
+  totalMarks: number;
+
+  @ApiProperty({ example: true, description: 'Enable pass marks for this field', default: false })
+  @IsBoolean()
+  @IsOptional()
+  enablePassMarks?: boolean;
+
+  @ApiProperty({ example: 15, description: 'Pass marks for this field', required: false })
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  passMarks?: number;
+
+  @ApiProperty({ example: true, description: 'Enable negative marking for this field', default: false })
+  @IsBoolean()
+  @IsOptional()
+  enableNegativeMarking?: boolean;
+
+  @ApiProperty({ example: 0.5, description: 'Negative marks per wrong answer', required: false })
+  @IsNumber()
+  @IsOptional()
+  negativeMarks?: number;
+}
 
 export class UpdateExamDto {
   @ApiProperty({ example: 'Updated Exam Name', description: 'Updated name of the exam', required: false })
@@ -29,31 +59,25 @@ export class UpdateExamDto {
   @IsOptional()
   topicName?: string;
 
-  @ApiProperty({ example: '507f1f77bcf86cd799439011', description: 'Updated class ID', required: false })
-  @IsMongoId()
+  @ApiProperty({ example: 'Updated Class', description: 'Updated class name', required: false })
+  @IsString()
   @IsOptional()
-  classId?: string;
+  className?: string;
 
-  @ApiProperty({ 
-    example: ['507f1f77bcf86cd799439012', '507f1f77bcf86cd799439013'], 
-    description: 'Updated array of batch IDs',
-    required: false 
-  })
-  @IsArray()
+  @ApiProperty({ example: 'Updated Batch', description: 'Updated batch name', required: false })
+  @IsString()
   @IsOptional()
-  @ArrayMinSize(1)
-  @IsMongoId({ each: true })
-  batchIds?: string[];
+  batchName?: string;
 
-  @ApiProperty({ example: '507f1f77bcf86cd799439014', description: 'Updated subject ID', required: false })
-  @IsMongoId()
+  @ApiProperty({ example: 'Updated Subject', description: 'Updated subject name', required: false })
+  @IsString()
   @IsOptional()
-  subjectId?: string;
+  subjectName?: string;
 
-  @ApiProperty({ example: '507f1f77bcf86cd799439015', description: 'Updated exam category ID', required: false })
-  @IsMongoId()
+  @ApiProperty({ example: 'Updated Category', description: 'Updated exam category', required: false })
+  @IsString()
   @IsOptional()
-  examCategoryId?: string;
+  examCategory?: string;
 
   @ApiProperty({ example: '2024-12-26', description: 'Updated exam date', required: false })
   @IsDate()
@@ -71,15 +95,15 @@ export class UpdateExamDto {
   showMarksTitle?: boolean;
 
   @ApiProperty({ 
-    example: ['mcq', 'cq'], 
-    description: 'Updated selected marks fields',
-    required: false,
-    enum: VALID_MARKS_FIELDS
+    type: [MarksFieldDto],
+    description: 'Updated marks fields configuration',
+    required: false
   })
   @IsArray()
   @IsOptional()
-  @IsIn(VALID_MARKS_FIELDS, { each: true })
-  selectedMarksFields?: string[];
+  @ValidateNested({ each: true })
+  @Type(() => MarksFieldDto)
+  marksFields?: MarksFieldDto[];
 
   @ApiProperty({ example: 120, description: 'Updated total marks', minimum: 1, maximum: 1000, required: false })
   @IsNumber()
@@ -99,14 +123,14 @@ export class UpdateExamDto {
 
   @ApiProperty({ 
     example: 45, 
-    description: 'Updated pass marks',
+    description: 'Updated total pass marks',
     minimum: 0,
     required: false 
   })
   @IsNumber()
   @IsOptional()
   @Min(0)
-  passMarks?: number;
+  totalPassMarks?: number;
 
   @ApiProperty({ 
     example: true, 
@@ -134,32 +158,4 @@ export class UpdateExamDto {
   @IsBoolean()
   @IsOptional()
   useGPASystem?: boolean;
-
-  @ApiProperty({ 
-    example: 'Updated instructions for the exam', 
-    description: 'Updated exam instructions',
-    required: false 
-  })
-  @IsString()
-  @IsOptional()
-  instructions?: string;
-
-  @ApiProperty({ 
-    example: 150, 
-    description: 'Updated exam duration in minutes',
-    required: false 
-  })
-  @IsNumber()
-  @IsOptional()
-  @Min(1)
-  duration?: number;
-
-  @ApiProperty({ 
-    example: false, 
-    description: 'Updated active status',
-    required: false 
-  })
-  @IsBoolean()
-  @IsOptional()
-  isActive?: boolean;
 }

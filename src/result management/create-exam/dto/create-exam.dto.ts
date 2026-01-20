@@ -12,47 +12,76 @@ import {
   Min,
   Max,
   ArrayMinSize,
-  ArrayContains,
-  IsIn
+  ValidateNested
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-// Valid marks fields
-const VALID_MARKS_FIELDS = ['mcq', 'cq', 'written'];
+class MarksFieldDto {
+  @ApiProperty({ example: 'mcq', description: 'Type of marks field' })
+  @IsString()
+  @IsNotEmpty()
+  type: string;
+
+  @ApiProperty({ example: 30, description: 'Total marks for this field' })
+  @IsNumber()
+  @Min(0)
+  @Max(1000)
+  totalMarks: number;
+
+  @ApiProperty({ example: true, description: 'Enable pass marks for this field', default: false })
+  @IsBoolean()
+  @IsOptional()
+  enablePassMarks?: boolean;
+
+  @ApiProperty({ example: 15, description: 'Pass marks for this field', required: false })
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  passMarks?: number;
+
+  @ApiProperty({ example: true, description: 'Enable negative marking for this field', default: false })
+  @IsBoolean()
+  @IsOptional()
+  enableNegativeMarking?: boolean;
+
+  @ApiProperty({ example: 0.5, description: 'Negative marks per wrong answer', required: false })
+  @IsNumber()
+  @IsOptional()
+  negativeMarks?: number;
+}
 
 export class CreateExamDto {
-  @ApiProperty({ example: 'Mid-Term Examination 2025', description: 'Name of the exam' })
+  @ApiProperty({ example: 'tet', description: 'Name of the exam' })
   @IsString()
   @IsNotEmpty()
   examName: string;
 
-  @ApiProperty({ example: 'Algebra & Geometry', description: 'Topic name for the exam', required: false })
+  @ApiProperty({ example: 'adca', description: 'Topic name for the exam', required: false })
   @IsString()
   @IsOptional()
   topicName?: string;
 
-  @ApiProperty({ example: '507f1f77bcf86cd799439011', description: 'Class ID' })
-  @IsMongoId()
-  classId: string;
+  @ApiProperty({ example: 'HSC 2027', description: 'Class name' })
+  @IsString()
+  @IsNotEmpty()
+  className: string;
 
-  @ApiProperty({ 
-    example: ['507f1f77bcf86cd799439012', '507f1f77bcf86cd799439013'], 
-    description: 'Array of batch IDs' 
-  })
-  @IsArray()
-  @ArrayMinSize(1)
-  @IsMongoId({ each: true })
-  batchIds: string[];
+  @ApiProperty({ example: 'SUN-3PM', description: 'Batch name' })
+  @IsString()
+  @IsNotEmpty()
+  batchName: string;
 
-  @ApiProperty({ example: '507f1f77bcf86cd799439014', description: 'Subject ID' })
-  @IsMongoId()
-  subjectId: string;
+  @ApiProperty({ example: 'Mathematics', description: 'Subject name' })
+  @IsString()
+  @IsNotEmpty()
+  subjectName: string;
 
-  @ApiProperty({ example: '507f1f77bcf86cd799439015', description: 'Exam category ID' })
-  @IsMongoId()
-  examCategoryId: string;
+  @ApiProperty({ example: 'Class Test', description: 'Exam category' })
+  @IsString()
+  @IsNotEmpty()
+  examCategory: string;
 
-  @ApiProperty({ example: '2024-12-25', description: 'Exam date' })
+  @ApiProperty({ example: '2026-01-16', description: 'Exam date' })
   @IsDate()
   @Type(() => Date)
   examDate: Date;
@@ -67,15 +96,15 @@ export class CreateExamDto {
   showMarksTitle?: boolean;
 
   @ApiProperty({ 
-    example: ['mcq', 'cq', 'written'], 
-    description: 'Selected marks fields',
-    required: false,
-    enum: VALID_MARKS_FIELDS
+    type: [MarksFieldDto],
+    description: 'Marks fields configuration',
+    required: false
   })
   @IsArray()
   @IsOptional()
-  @IsIn(VALID_MARKS_FIELDS, { each: true })
-  selectedMarksFields?: string[];
+  @ValidateNested({ each: true })
+  @Type(() => MarksFieldDto)
+  marksFields?: MarksFieldDto[];
 
   @ApiProperty({ example: 100, description: 'Total marks for the exam', minimum: 1, maximum: 1000 })
   @IsNumber()
@@ -94,18 +123,18 @@ export class CreateExamDto {
 
   @ApiProperty({ 
     example: 40, 
-    description: 'Pass marks (absolute value, not percentage)',
+    description: 'Total pass marks (absolute value)',
     minimum: 0,
     required: false 
   })
   @IsNumber()
   @IsOptional()
   @Min(0)
-  passMarks?: number;
+  totalPassMarks?: number;
 
   @ApiProperty({ 
     example: true, 
-    description: 'Include % marks in result reports',
+    description: 'Show % marks in result reports',
     default: false 
   })
   @IsBoolean()
@@ -129,33 +158,4 @@ export class CreateExamDto {
   @IsBoolean()
   @IsOptional()
   useGPASystem?: boolean;
-
-  @ApiProperty({ 
-    example: 'Additional instructions for the exam', 
-    description: 'Exam instructions or notes',
-    required: false 
-  })
-  @IsString()
-  @IsOptional()
-  instructions?: string;
-
-  @ApiProperty({ 
-    example: 180, 
-    description: 'Exam duration in minutes',
-    required: false,
-    default: 180 
-  })
-  @IsNumber()
-  @IsOptional()
-  @Min(1)
-  duration?: number;
-
-  @ApiProperty({ 
-    example: true, 
-    description: 'Active status of the exam',
-    default: true 
-  })
-  @IsBoolean()
-  @IsOptional()
-  isActive?: boolean;
 }

@@ -2,10 +2,26 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
-// Removed complex MarkTitle and Grade classes
-// Using simpler approach with predefined marks fields
+@Schema({ timestamps: true })
+export class MarksField {
+  @Prop({ required: true })
+  type: string; // 'mcq', 'cq', 'written'
 
-export type ExamDocument = Exam & Document;
+  @Prop({ required: true, min: 0 })
+  totalMarks: number;
+
+  @Prop({ default: false })
+  enablePassMarks: boolean;
+
+  @Prop({ min: 0, default: null })
+  passMarks?: number;
+
+  @Prop({ default: false })
+  enableNegativeMarking: boolean;
+
+  @Prop({ min: 0, default: null })
+  negativeMarks?: number;
+}
 
 @Schema({ timestamps: true })
 export class Exam {
@@ -15,17 +31,17 @@ export class Exam {
   @Prop({ required: true })
   topicName: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'Class', required: true })
-  class: Types.ObjectId;
+  @Prop({ required: true })
+  className: string;
 
-  @Prop({ type: [{ type: Types.ObjectId, ref: 'Batch' }], required: true })
-  batches: Types.ObjectId[];
+  @Prop({ required: true })
+  batchName: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'Subject', required: true })
-  subject: Types.ObjectId;
+  @Prop({ required: true })
+  subjectName: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'ExamCategory', required: true })
-  examCategory: Types.ObjectId;
+  @Prop({ required: true })
+  examCategory: string;
 
   @Prop({ required: true })
   examDate: Date;
@@ -33,8 +49,8 @@ export class Exam {
   @Prop({ default: false })
   showMarksTitle: boolean;
 
-  @Prop({ type: [String], default: [] })
-  selectedMarksFields: string[]; // ['mcq', 'cq', 'written']
+  @Prop({ type: [MarksField], default: [] })
+  marksFields: MarksField[];
 
   @Prop({ required: true, min: 0 })
   totalMarks: number;
@@ -43,7 +59,7 @@ export class Exam {
   enableGrading: boolean;
 
   @Prop({ min: 0, default: null })
-  passMarks?: number; // Changed from passMarksPercentage
+  totalPassMarks?: number;
 
   @Prop({ default: false })
   showPercentageInResult: boolean;
@@ -54,28 +70,25 @@ export class Exam {
   @Prop({ default: false })
   useGPASystem: boolean;
 
-  @Prop({ default: null })
-  instructions?: string;
-
-  @Prop({ min: 1, default: null })
-  duration?: number;
-
-  @Prop({ default: true })
-  isActive: boolean;
-
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   createdBy: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User', default: null })
   updatedBy: Types.ObjectId | null;
+
+  @Prop({ default: true })
+  isActive: boolean;
 }
 
+export const MarksFieldSchema = SchemaFactory.createForClass(MarksField);
 export const ExamSchema = SchemaFactory.createForClass(Exam);
 
+export type ExamDocument = Exam & Document;
+
 // Create indexes
-ExamSchema.index({ examName: 1, class: 1, subject: 1 }, { unique: true });
+ExamSchema.index({ examName: 1, className: 1, subjectName: 1 }, { unique: true });
 ExamSchema.index({ examDate: 1 });
-ExamSchema.index({ class: 1 });
-ExamSchema.index({ subject: 1 });
+ExamSchema.index({ className: 1 });
+ExamSchema.index({ subjectName: 1 });
 ExamSchema.index({ examCategory: 1 });
 ExamSchema.index({ isActive: 1 });
