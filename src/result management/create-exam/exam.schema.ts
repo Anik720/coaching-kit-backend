@@ -2,26 +2,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
-@Schema({ timestamps: true })
-export class MarksField {
-  @Prop({ required: true })
-  type: string; // 'mcq', 'cq', 'written'
-
-  @Prop({ required: true, min: 0 })
-  totalMarks: number;
-
-  @Prop({ default: false })
-  enablePassMarks: boolean;
-
-  @Prop({ min: 0, default: null })
-  passMarks?: number;
-
-  @Prop({ default: false })
-  enableNegativeMarking: boolean;
-
-  @Prop({ min: 0, default: null })
-  negativeMarks?: number;
-}
+export type ExamDocument = Exam & Document;
 
 @Schema({ timestamps: true })
 export class Exam {
@@ -49,11 +30,35 @@ export class Exam {
   @Prop({ default: false })
   showMarksTitle: boolean;
 
-  @Prop({ type: [MarksField], default: [] })
-  marksFields: MarksField[];
+  @Prop({ type: [{ 
+    type: { type: String, enum: ['mcq', 'cq', 'written'] },
+    totalMarks: { type: Number, min: 0 },
+    enablePassMarks: { type: Boolean, default: false },
+    passMarks: { type: Number, min: 0, default: null },
+    enableNegativeMarking: { type: Boolean, default: false },
+    negativeMarks: { type: Number, min: 0, default: null }
+  }], default: [] })
+  marksFields: Array<{
+    type: 'mcq' | 'cq' | 'written';
+    totalMarks: number;
+    enablePassMarks: boolean;
+    passMarks?: number;
+    enableNegativeMarking: boolean;
+    negativeMarks?: number;
+  }>;
 
   @Prop({ required: true, min: 0 })
   totalMarks: number;
+
+  // Calculate these from marksFields for easy access
+  @Prop({ min: 0, default: 0 })
+  mcqMarks: number;
+
+  @Prop({ min: 0, default: 0 })
+  cqMarks: number;
+
+  @Prop({ min: 0, default: 0 })
+  writtenMarks: number;
 
   @Prop({ default: false })
   enableGrading: boolean;
@@ -78,12 +83,23 @@ export class Exam {
 
   @Prop({ default: true })
   isActive: boolean;
+
+  @Prop({ default: false })
+  isPublished: boolean;
+
+  // Add class and batch references as ObjectIds
+  @Prop({ type: Types.ObjectId, ref: 'Class' })
+  class?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Batch' })
+  batch?: Types.ObjectId;
+
+  // Virtual populate
+  classDetails?: any;
+  batchDetails?: any;
 }
 
-export const MarksFieldSchema = SchemaFactory.createForClass(MarksField);
 export const ExamSchema = SchemaFactory.createForClass(Exam);
-
-export type ExamDocument = Exam & Document;
 
 // Create indexes
 ExamSchema.index({ examName: 1, className: 1, subjectName: 1 }, { unique: true });
@@ -92,3 +108,42 @@ ExamSchema.index({ className: 1 });
 ExamSchema.index({ subjectName: 1 });
 ExamSchema.index({ examCategory: 1 });
 ExamSchema.index({ isActive: 1 });
+ExamSchema.index({ isPublished: 1 });
+
+// Pre-save middleware to calculate marks breakdown
+ExamSchema.pre('save', function(next) {
+  const exam = this as ExamDocument;
+  
+  // Reset marks
+  exam.mcqMarks = 0;
+  exam.cqMarks = 0;
+  exam.writtenMarks = 0;
+  
+  // Calculate marks from marksFields
+  exam.marksFields.forEach(field => {
+    if (field.type === 'mcq') {
+      exam.mcqMarks += field.totalMarks;
+    } else if (field.type === 'cq') {
+      exam.cqMarks += field.totalMarks;
+    } else if (field.type === 'written') {
+      exam.writtenMarks += field.totalMarks;
+    }
+  });
+  
+  next();
+});
+
+// Virtual populate
+ExamSchema.virtual('classDetails', {
+  ref: 'Class',
+  localField: 'class',
+  foreignField: '_id',
+  justOne: true,
+});
+
+ExamSchema.virtual('batchDetails', {
+  ref: 'Batch',
+  localField: 'batch',
+  foreignField: '_id',
+  justOne: true,
+});
