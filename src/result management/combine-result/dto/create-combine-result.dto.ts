@@ -1,17 +1,14 @@
-// dto/create-combine-result.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import { 
   IsString, 
   IsNotEmpty, 
   IsArray, 
   IsDateString, 
-  IsEnum, 
   IsOptional,
   IsBoolean,
   ArrayNotEmpty,
-  ValidateNested 
+  IsMongoId
 } from 'class-validator';
-import { Type } from 'class-transformer';
 
 export class CreateCombineResultDto {
   @ApiProperty({ example: 'HSC 2027 Combined Result', description: 'Name of the combined result' })
@@ -22,6 +19,7 @@ export class CreateCombineResultDto {
   @ApiProperty({ example: '67f1f77bcf86cd799439011', description: 'Class ID' })
   @IsString()
   @IsNotEmpty()
+  @IsMongoId()
   class: string;
 
   @ApiProperty({ 
@@ -30,6 +28,7 @@ export class CreateCombineResultDto {
   })
   @IsArray()
   @ArrayNotEmpty()
+  @IsMongoId({ each: true })
   batches: string[];
 
   @ApiProperty({ 
@@ -38,14 +37,16 @@ export class CreateCombineResultDto {
   })
   @IsArray()
   @ArrayNotEmpty()
+  @IsMongoId({ each: true })
   exams: string[];
 
   @ApiProperty({ 
-    example: 'class_test', 
-    enum: ['class_test', 'mid_term', 'final', 'mock_test', 'custom'],
-    description: 'Category of the combined result' 
+    example: '67f1f77bcf86cd799439101', 
+    description: 'Exam Category ID from exam-category collection' 
   })
-  @IsEnum(['class_test', 'mid_term', 'final', 'mock_test', 'custom'])
+  @IsString()
+  @IsNotEmpty()
+  @IsMongoId()
   category: string;
 
   @ApiProperty({ example: '2024-01-01', description: 'Start date for exam filtering' })
@@ -82,12 +83,11 @@ export class SearchCombineResultDto {
   batches?: string[];
 
   @ApiProperty({ 
-    example: 'class_test', 
-    enum: ['class_test', 'mid_term', 'final', 'mock_test', 'custom'],
-    description: 'Category of exam',
+    example: '67f1f77bcf86cd799439101', 
+    description: 'Exam Category ID',
     required: false 
   })
-  @IsEnum(['class_test', 'mid_term', 'final', 'mock_test', 'custom'])
+  @IsString()
   @IsOptional()
   category?: string;
 

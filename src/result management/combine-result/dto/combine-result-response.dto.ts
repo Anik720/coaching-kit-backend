@@ -1,4 +1,3 @@
-// dto/combine-result-response.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import { Types } from 'mongoose';
 
@@ -38,16 +37,10 @@ export class CombineResultResponseDto {
         mcqMarks: 0,
         cqMarks: 0,
         writtenMarks: 30,
-        category: 'class_test'
-      },
-      { 
-        _id: '67f1f77bcf86cd799439022', 
-        examName: 'Class Test -30', 
-        totalMarks: 30,
-        mcqMarks: 0,
-        cqMarks: 0,
-        writtenMarks: 30,
-        category: 'class_test'
+        category: {
+          _id: '67f1f77bcf86cd799439101',
+          categoryName: 'Class Test'
+        }
       }
     ]
   })
@@ -58,11 +51,22 @@ export class CombineResultResponseDto {
     mcqMarks: number;
     cqMarks: number;
     writtenMarks: number;
-    category: string;
+    category: {
+      _id: string;
+      categoryName: string;
+    };
   }>;
 
-  @ApiProperty({ example: 'class_test' })
-  category: string;
+  @ApiProperty({ 
+    example: {
+      _id: '67f1f77bcf86cd799439101',
+      categoryName: 'Class Test'
+    }
+  })
+  category: {
+    _id: string;
+    categoryName: string;
+  };
 
   @ApiProperty({ example: '2024-01-01T00:00:00.000Z' })
   startDate: Date;
@@ -111,11 +115,11 @@ export class CombineResultResponseDto {
     role: string;
   } | null;
 
-//   @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
-//   createdAt: Date;
+  @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
+  createdAt: Date;
 
-//   @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
-//   updatedAt: Date;
+  @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
+  updatedAt: Date;
 }
 
 export class CombineResultStudentResponseDto {
@@ -187,9 +191,9 @@ export class CombineResultStudentResponseDto {
   @ApiProperty({ example: 'first_class' })
   resultClass: string;
 
-//   @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
-//   createdAt: Date;
+  @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
+  createdAt: Date;
 
-//   @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
-//   updatedAt: Date;
+  @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
+  updatedAt: Date;
 }

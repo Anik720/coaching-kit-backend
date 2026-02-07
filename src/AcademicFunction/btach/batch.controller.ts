@@ -835,7 +835,7 @@ export class BatchController {
 
     const totalFee = (plainBatch.admissionFee || 0) + (plainBatch.tuitionFee || 0) + (plainBatch.courseFee || 0);
     const daysRemaining = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    const isActiveSession = today >= start && today <= end && plainBatch.isActive;
+    // const isActiveSession = today >= start && today <= end && plainBatch.isActive;
 
     // Helper to safely extract populated ref
     const safeRef = (obj: any, idField: string, nameField: string) => {
@@ -892,7 +892,7 @@ export class BatchController {
       updatedAt: plainBatch.updatedAt,
       totalFee,
       daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
-      isActiveSession,
+      // isActiveSession,
     };
   }
 }

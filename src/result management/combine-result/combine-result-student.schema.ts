@@ -1,8 +1,6 @@
-// combine-result-student.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
-// Use Mongoose's built-in Document type with the schema
 export type CombineResultStudentDocument = CombineResultStudent & Document;
 
 @Schema({
@@ -43,7 +41,6 @@ export class CombineResultStudent {
   })
   batch: Types.ObjectId;
 
-  // Exam-wise marks (dynamic based on exams included)
   @Prop({
     type: Map,
     of: {
@@ -115,10 +112,6 @@ export class CombineResultStudent {
   })
   resultClass: string;
 
-  // REMOVED: _id: Types.ObjectId;
-  // Mongoose will automatically add _id as Types.ObjectId
-  // Don't define it manually
-
   // Virtual fields
   studentDetails?: any;
   combineResultDetails?: any;
@@ -156,26 +149,26 @@ CombineResultStudentSchema.virtual('batchDetails', {
 
 // Pre-save middleware for calculations
 CombineResultStudentSchema.pre('save', function (next) {
-  const studentResult = this as CombineResultStudentDocument;
+  const studentResult = this as any;
   
-  // Calculate total obtained marks from all exams
   let totalObtainedMarks = 0;
   let totalPossibleMarks = 0;
   let allAbsent = true;
   
-  studentResult.examMarks.forEach((exam, examId) => {
-    if (!exam.isAbsent) {
-      totalObtainedMarks += exam.obtainedMarks;
-      totalPossibleMarks += exam.totalMarks;
-      allAbsent = false;
-    }
-  });
+  if (studentResult.examMarks && studentResult.examMarks instanceof Map) {
+    studentResult.examMarks.forEach((exam: any) => {
+      if (!exam.isAbsent) {
+        totalObtainedMarks += exam.obtainedMarks || 0;
+        totalPossibleMarks += exam.totalMarks || 0;
+        allAbsent = false;
+      }
+    });
+  }
   
   studentResult.totalMarks = totalPossibleMarks;
   studentResult.obtainedMarks = totalObtainedMarks;
   studentResult.isAbsent = allAbsent;
   
-  // Calculate percentage if not absent
   if (!allAbsent && totalPossibleMarks > 0) {
     studentResult.percentage = (totalObtainedMarks / totalPossibleMarks) * 100;
   } else {

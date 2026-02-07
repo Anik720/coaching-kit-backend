@@ -1,4 +1,3 @@
-// combine-result.service.ts
 import {
   Injectable,
   NotFoundException,
@@ -18,6 +17,7 @@ import { Student, StudentDocument } from '../../student/schemas/student.schema';
 import { Class, ClassDocument } from 'src/AcademicFunction/class/class.schema';
 import { Batch, BatchDocument } from 'src/AcademicFunction/btach/batch.schema';
 import { Exam, ExamDocument } from '../create-exam/exam.schema';
+import { ExamCategory, ExamCategoryDocument } from '../exam category/exam-category.schema';
 
 @Injectable()
 export class CombineResultService {
@@ -42,6 +42,9 @@ export class CombineResultService {
 
     @InjectModel(Batch.name)
     private batchModel: Model<BatchDocument>,
+
+    @InjectModel(ExamCategory.name)
+    private examCategoryModel: Model<ExamCategoryDocument>,
   ) {}
 
   // Helper method to safely get ObjectId as string
@@ -56,7 +59,12 @@ export class CombineResultService {
       const objId = (id as any)._id;
       return this.safeGetId(objId);
     }
-    return '';
+    // Handle null/undefined
+    if (id === null || id === undefined) {
+      return '';
+    }
+    // As a last resort, try to convert to string
+    return String(id);
   }
 
   // Helper method to safely get date
@@ -141,51 +149,141 @@ export class CombineResultService {
     }
   }
 
+  // Get active exam categories
+  async getExamCategories(): Promise<any[]> {
+    try {
+      const categories = await this.examCategoryModel
+        .find({ isActive: true })
+        .sort({ categoryName: 1 })
+        .exec();
+
+      return categories.map((category: ExamCategoryDocument) => ({
+        _id: this.safeGetId(category._id),
+        categoryName: category.categoryName,
+        description: category.description || '',
+        isActive: category.isActive,
+      }));
+    } catch (error) {
+      console.error('Get exam categories error:', error);
+      throw new InternalServerErrorException('Failed to fetch exam categories');
+    }
+  }
+
   // Create combine result
   async create(
     createCombineResultDto: CreateCombineResultDto,
     userId: string,
   ): Promise<CombineResultResponseDto> {
+    console.log('🚀 Starting create combine result process');
+    console.log('📝 Received DTO:', JSON.stringify(createCombineResultDto, null, 2));
+    console.log('👤 User ID:', userId);
+
     const session = await this.combineResultModel.db.startSession();
     session.startTransaction();
 
     try {
+      // Validate user ID
       if (!Types.ObjectId.isValid(userId)) {
         throw new BadRequestException('Invalid user ID');
       }
 
+      // Validate class ID
       const classId = createCombineResultDto.class;
-      if (!Types.ObjectId.isValid(classId)) throw new BadRequestException('Invalid class ID');
+      console.log('🏫 Class ID:', classId);
+      if (!Types.ObjectId.isValid(classId)) {
+        throw new BadRequestException('Invalid class ID format');
+      }
 
+      // Validate batch IDs
       const batchIds = createCombineResultDto.batches;
+      console.log('📚 Batch IDs:', batchIds);
       if (!Array.isArray(batchIds) || batchIds.length === 0) {
         throw new BadRequestException('At least one batch must be selected');
       }
 
+      // Validate exam IDs
       const examIds = createCombineResultDto.exams;
+      console.log('📝 Exam IDs:', examIds);
       if (!Array.isArray(examIds) || examIds.length === 0) {
         throw new BadRequestException('At least one exam must be selected');
       }
 
-      // Existence checks
-      const classExists = await this.classModel.findById(classId).session(session).exec();
-      if (!classExists) throw new NotFoundException('Class not found');
+      // Validate category ID
+      const categoryId = createCombineResultDto.category;
+      console.log('🏷️ Category ID:', categoryId);
+      console.log('✅ Is valid ObjectId?', Types.ObjectId.isValid(categoryId));
+      
+      if (!Types.ObjectId.isValid(categoryId)) {
+        throw new BadRequestException(`Invalid category ID format: ${categoryId}`);
+      }
 
+      // =================== EXISTENCE CHECKS ===================
+      console.log('\n🔍 Starting existence checks...');
+
+      // Check class existence
+      const classExists = await this.classModel.findById(classId).session(session).exec();
+      if (!classExists) {
+        console.log('❌ Class not found:', classId);
+        throw new NotFoundException(`Class with ID ${classId} not found`);
+      }
+      console.log('✅ Class found:', classExists.classname);
+
+      // Check batches existence
+      const batchObjectIds = batchIds.map(id => new Types.ObjectId(id));
       const batches = await this.batchModel
-        .find({ _id: { $in: batchIds.map((id) => new Types.ObjectId(id)) } })
+        .find({ 
+          _id: { $in: batchObjectIds },
+          isActive: true 
+        })
         .session(session)
         .exec();
 
+      console.log('📊 Found batches:', batches.length, 'Expected:', batchIds.length);
+      
       if (batches.length !== batchIds.length) {
-        throw new NotFoundException('One or more batches not found');
+        const foundIds = batches.map(b => this.safeGetId(b._id));
+        const missingIds = batchIds.filter(id => !foundIds.includes(id));
+        console.log('❌ Missing batch IDs:', missingIds);
+        throw new NotFoundException(`Batches not found or inactive: ${missingIds.join(', ')}`);
+      }
+      console.log('✅ All batches found and active');
+
+      // Check category existence
+      console.log('🔎 Looking for category with ID:', categoryId);
+      const category = await this.examCategoryModel
+        .findById(categoryId)
+        .session(session)
+        .exec();
+      
+      if (!category) {
+        console.log('❌ Category not found with ID:', categoryId);
+        console.log('ℹ️ Available categories in DB:');
+        const allCategories = await this.examCategoryModel.find({}).session(session).exec();
+        console.log(allCategories.map(c => ({ id: this.safeGetId(c._id), name: c.categoryName, active: c.isActive })));
+        throw new NotFoundException(`Exam category with ID ${categoryId} not found`);
+      }
+      
+      console.log('✅ Category found:', {
+        id: this.safeGetId(category._id),
+        name: category.categoryName,
+        active: category.isActive
+      });
+
+      if (!category.isActive) {
+        console.log('❌ Category is not active');
+        throw new BadRequestException('Exam category is not active');
       }
 
+      // Parse dates
       const startDate = new Date(createCombineResultDto.startDate);
       const endDate = new Date(createCombineResultDto.endDate);
+      console.log('📅 Date range:', startDate.toISOString(), 'to', endDate.toISOString());
 
+      // Check exams existence
+      const examObjectIds = examIds.map(id => new Types.ObjectId(id));
       const exams = await this.examModel
         .find({
-          _id: { $in: examIds.map((id) => new Types.ObjectId(id)) },
+          _id: { $in: examObjectIds },
           isActive: true,
           isPublished: true,
           examDate: { $gte: startDate, $lte: endDate },
@@ -193,9 +291,34 @@ export class CombineResultService {
         .session(session)
         .exec();
 
+      console.log('📊 Found exams:', exams.length, 'Expected:', examIds.length);
+      
       if (exams.length !== examIds.length) {
-        throw new NotFoundException('One or more exams not found, inactive or not published');
+        const foundExamIds = exams.map(e => this.safeGetId(e._id));
+        const missingExamIds = examIds.filter(id => !foundExamIds.includes(id));
+        
+        // Detailed debugging for missing exams
+        console.log('❌ Missing exam IDs:', missingExamIds);
+        for (const missingId of missingExamIds) {
+          const examCheck = await this.examModel
+            .findById(missingId)
+            .session(session)
+            .exec();
+          if (examCheck) {
+            console.log(`ℹ️ Exam ${missingId} exists but:`, {
+              isActive: examCheck.isActive,
+              isPublished: examCheck.isPublished,
+              examDate: examCheck.examDate,
+              inRange: examCheck.examDate >= startDate && examCheck.examDate <= endDate
+            });
+          } else {
+            console.log(`ℹ️ Exam ${missingId} does not exist in database`);
+          }
+        }
+        
+        throw new NotFoundException(`One or more exams not found, inactive, not published, or outside date range: ${missingExamIds.join(', ')}`);
       }
+      console.log('✅ All exams found and valid');
 
       // Calculate totals
       let totalMarks = 0;
@@ -210,27 +333,39 @@ export class CombineResultService {
         writtenMarks += exam.writtenMarks ?? 0;
       });
 
+      console.log('📊 Calculated totals:', {
+        totalMarks,
+        mcqMarks,
+        cqMarks,
+        writtenMarks
+      });
+
       // Name uniqueness check
-      const existing = await this.combineResultModel.findOne(
+      const existingCombineResult = await this.combineResultModel.findOne(
         {
           name: createCombineResultDto.name,
           class: new Types.ObjectId(classId),
+          category: new Types.ObjectId(categoryId),
         },
         null,
         { session },
       );
 
-      if (existing) {
-        throw new ConflictException('Combine result with this name already exists for this class');
+      if (existingCombineResult) {
+        console.log('❌ Combine result with same name already exists');
+        throw new ConflictException('Combine result with this name already exists for this class and category');
       }
+      console.log('✅ Name is unique');
 
-      // Create main document with proper typing
+      // =================== CREATE MAIN DOCUMENT ===================
+      console.log('\n📄 Creating combine result document...');
+      
       const combineResultData = {
         name: createCombineResultDto.name,
         class: new Types.ObjectId(classId),
-        batches: batchIds.map((id) => new Types.ObjectId(id)),
-        exams: examIds.map((id) => new Types.ObjectId(id)),
-        category: createCombineResultDto.category,
+        batches: batchObjectIds,
+        exams: examObjectIds,
+        category: new Types.ObjectId(categoryId),
         startDate,
         endDate,
         totalMarks,
@@ -242,30 +377,61 @@ export class CombineResultService {
         isPublished: createCombineResultDto.isPublished ?? false,
       };
 
+      console.log('📋 Combine result data:', combineResultData);
+
       const createdResults = await this.combineResultModel.create([combineResultData], { session });
       const savedCombineResult = createdResults[0] as CombineResultDocument;
+      const savedCombineResultId = this.safeGetId(savedCombineResult._id);
+      console.log('✅ Combine result created with ID:', savedCombineResultId);
 
-      // Fetch students
+      // =================== FETCH STUDENTS ===================
+      console.log('\n👥 Fetching students...');
+      
+      // IMPORTANT: Your student schema shows class and batch are Types.ObjectId references
+      // But the data you provided shows nested objects. Let's handle both cases
+      
+            // First, let's debug what the actual student data looks like
       const students = await this.studentModel
         .find({
-          class: new Types.ObjectId(classId),
-          batch: { $in: batchIds.map((id) => new Types.ObjectId(id)) },
+          class: classId, // String comparison, not ObjectId
+          batch: { $in: batchIds }, // String comparison, not ObjectId
           isActive: true,
           status: 'active',
         })
         .session(session)
         .exec();
 
+      console.log('📊 Found students:', students.length);
+      console.log('📋 Students found:', students.map(s => ({
+        id: this.safeGetId(s._id),
+        name: s.nameEnglish,
+        class: s.class,
+        batch: s.batch,
+        classType: typeof s.class,
+        batchType: typeof s.batch
+      })));
+
       if (students.length === 0) {
+        console.log('❌ No active students found');
         throw new BadRequestException('No active students found in the selected batches');
       }
 
-      // Create student result entries
+      console.log('📋 Students found:', students.map(s => ({
+        id: this.safeGetId(s._id),
+        name: s.nameEnglish,
+        class: this.safeGetId(s.class),
+        batch: this.safeGetId(s.batch)
+      })));
+
+      // =================== CREATE STUDENT RESULT ENTRIES ===================
+      console.log('\n📝 Creating student result entries...');
+      
       const studentResultPromises = students.map(async (student: StudentDocument) => {
         const examMarks = new Map<string, { totalMarks: number; obtainedMarks: number; isAbsent: boolean }>();
         let totalObtainedMarks = 0;
         let allAbsent = true;
 
+        // Fetch results for each exam
         for (const exam of exams) {
           const examIdStr = this.safeGetId(exam._id);
 
@@ -299,18 +465,31 @@ export class CombineResultService {
           }
         }
 
-        const percentage =
-          !allAbsent && totalMarks > 0 ? (totalObtainedMarks / totalMarks) * 100 : 0;
+        // Calculate percentage
+        const percentage = !allAbsent && totalMarks > 0 
+          ? (totalObtainedMarks / totalMarks) * 100 
+          : 0;
 
+        // Calculate grade, GPA, and result class
         const { grade, gpa } = this.calculateGradeAndGPA(percentage);
         const resultClass = this.determineResultClass(percentage);
         const isPassed = grade !== 'F';
 
+        // Get student's class and batch IDs correctly
+        const studentClassId = student.class instanceof Types.ObjectId 
+          ? student.class 
+          : new Types.ObjectId(this.safeGetId((student.class as any)?._id || student.class));
+        
+        const studentBatchId = student.batch instanceof Types.ObjectId 
+          ? student.batch 
+          : new Types.ObjectId(this.safeGetId((student.batch as any)?._id || student.batch));
+
+        // Create student result data
         const studentResultData = {
           combineResult: savedCombineResult._id,
           student: student._id,
-          class: new Types.ObjectId(classId),
-          batch: student.batch,
+          class: studentClassId,
+          batch: studentBatchId,
           examMarks,
           totalMarks,
           obtainedMarks: totalObtainedMarks,
@@ -327,41 +506,64 @@ export class CombineResultService {
       });
 
       await Promise.all(studentResultPromises);
+      console.log('✅ Student results created');
 
-      await this.updateStudentPositions(this.safeGetId(savedCombineResult._id), session);
+      // =================== UPDATE STUDENT POSITIONS ===================
+      console.log('\n🥇 Updating student positions...');
+      await this.updateStudentPositions(savedCombineResultId, session);
+      console.log('✅ Student positions updated');
 
+      // =================== COMMIT TRANSACTION ===================
+      console.log('\n💾 Committing transaction...');
       await session.commitTransaction();
+      console.log('✅ Transaction committed successfully');
 
-      // Final populated response
+      // =================== FETCH POPULATED RESPONSE ===================
+      console.log('\n🔍 Fetching populated response...');
+      
       const populated = await this.combineResultModel
         .findById(savedCombineResult._id)
         .populate('classDetails', 'classname')
         .populate('batchDetails', 'batchName sessionYear')
-        .populate('examDetails', 'examName totalMarks mcqMarks cqMarks writtenMarks examCategory')
+        .populate('examDetails', 'examName totalMarks mcqMarks cqMarks writtenMarks')
+        .populate('categoryDetails', 'categoryName description')
         .populate('createdByUser', 'email username role name')
         .populate('updatedByUser', 'email username role name')
         .exec();
 
-      if (!populated) throw new NotFoundException('Failed to reload created combine result');
+      if (!populated) {
+        console.log('❌ Failed to reload created combine result');
+        throw new NotFoundException('Failed to reload created combine result');
+      }
 
+      console.log('✅ Combine result creation completed successfully!');
       return this.mapToResponseDto(populated);
-    } catch (error: any) {
-      await session.abortTransaction();
-      console.error('Create combine result error:', error);
 
+    } catch (error: any) {
+      console.error('\n❌ ERROR in create combine result:', error.message);
+      console.error('Stack trace:', error.stack);
+      
+      await session.abortTransaction();
+      
+      // Handle specific error types
       if (error.code === 11000) {
+        console.error('Duplicate key error:', error.keyValue);
         throw new ConflictException('Combine result already exists');
       }
+      
       if (
         error instanceof BadRequestException ||
         error instanceof NotFoundException ||
         error instanceof ConflictException
       ) {
+        console.error('Known error type:', error.constructor.name);
         throw error;
       }
 
-      throw new InternalServerErrorException('Failed to create combine result');
+      console.error('Unknown error type, throwing InternalServerError');
+      throw new InternalServerErrorException(`Failed to create combine result: ${error.message}`);
     } finally {
+      console.log('🔚 Ending session');
       session.endSession();
     }
   }
@@ -369,6 +571,8 @@ export class CombineResultService {
   // Search exams for combine result creation
   async searchExamsForCombine(searchDto: SearchCombineResultDto): Promise<any[]> {
     try {
+      console.log('🔍 Searching exams with criteria:', searchDto);
+      
       const { class: classId, batches, category, startDate, endDate, status } = searchDto;
 
       const filter: any = { isActive: true };
@@ -384,8 +588,8 @@ export class CombineResultService {
         }
       }
 
-      if (category) {
-        filter.examCategory = category;
+      if (category && Types.ObjectId.isValid(category)) {
+        filter.examCategory = new Types.ObjectId(category);
       }
 
       if (startDate) {
@@ -402,15 +606,19 @@ export class CombineResultService {
         filter.isPublished = false;
       }
 
+      console.log('🔎 MongoDB filter:', filter);
+
       const exams = await this.examModel
         .find(filter)
         .populate('classDetails', 'classname')
         .populate('batchDetails', 'batchName')
+        .populate('examCategoryDetails', 'categoryName')
         .sort({ examDate: -1, createdAt: -1 })
         .exec();
 
-      return exams.map((exam: ExamDocument & { classDetails?: any; batchDetails?: any }) => {
-        // Handle batch details - it might be single or array
+      console.log(`✅ Found ${exams.length} exams`);
+
+      return exams.map((exam: ExamDocument & { classDetails?: any; batchDetails?: any; examCategoryDetails?: any }) => {
         let batchDetailsArray: any[] = [];
         if (Array.isArray(exam.batchDetails)) {
           batchDetailsArray = exam.batchDetails;
@@ -429,7 +637,10 @@ export class CombineResultService {
             _id: this.safeGetId(batch._id),
             batchName: batch.batchName || '',
           })),
-          category: exam.examCategory || '',
+          category: {
+            _id: exam.examCategoryDetails?._id ? this.safeGetId(exam.examCategoryDetails._id) : this.safeGetId(exam.examCategory) || '',
+            categoryName: exam.examCategoryDetails?.categoryName || '',
+          },
           totalMarks: exam.totalMarks || 0,
           mcqMarks: exam.mcqMarks || 0,
           cqMarks: exam.cqMarks || 0,
@@ -440,7 +651,7 @@ export class CombineResultService {
         };
       });
     } catch (error) {
-      console.error('Search exams error:', error);
+      console.error('❌ Search exams error:', error);
       throw new InternalServerErrorException('Failed to search exams');
     }
   }
@@ -476,8 +687,8 @@ export class CombineResultService {
         filter.class = new Types.ObjectId(classId);
       }
 
-      if (category) {
-        filter.category = category;
+      if (category && Types.ObjectId.isValid(category)) {
+        filter.category = new Types.ObjectId(category);
       }
 
       if (isPublished !== undefined) {
@@ -500,7 +711,8 @@ export class CombineResultService {
           .find(filter)
           .populate('classDetails', 'classname')
           .populate('batchDetails', 'batchName sessionYear')
-          .populate('examDetails', 'examName totalMarks mcqMarks cqMarks writtenMarks examCategory')
+          .populate('examDetails', 'examName totalMarks mcqMarks cqMarks writtenMarks')
+          .populate('categoryDetails', 'categoryName description')
           .populate('createdByUser', 'email username role name')
           .populate('updatedByUser', 'email username role name')
           .sort(sort)
@@ -534,7 +746,8 @@ export class CombineResultService {
         .findById(id)
         .populate('classDetails', 'classname')
         .populate('batchDetails', 'batchName sessionYear')
-        .populate('examDetails', 'examName totalMarks mcqMarks cqMarks writtenMarks examCategory')
+        .populate('examDetails', 'examName totalMarks mcqMarks cqMarks writtenMarks')
+        .populate('categoryDetails', 'categoryName description')
         .populate('createdByUser', 'email username role name')
         .populate('updatedByUser', 'email username role name')
         .exec();
@@ -567,7 +780,6 @@ export class CombineResultService {
         throw new BadRequestException('Invalid combine result ID');
       }
 
-      // Check if combine result exists
       const combineResult = await this.combineResultModel.findById(combineResultId).exec();
       if (!combineResult) {
         throw new NotFoundException('Combine result not found');
@@ -728,11 +940,12 @@ export class CombineResultService {
         const duplicate = await this.combineResultModel.findOne({
           name: updateDto.name,
           class: existingResult.class,
+          category: updateDto.category ? new Types.ObjectId(updateDto.category) : existingResult.category,
           _id: { $ne: new Types.ObjectId(id) },
         }).session(session).exec();
 
         if (duplicate) {
-          throw new ConflictException('Combine result with this name already exists for this class');
+          throw new ConflictException('Combine result with this name already exists for this class and category');
         }
       }
 
@@ -740,7 +953,7 @@ export class CombineResultService {
       const updateData: any = { ...updateDto };
       updateData.updatedBy = new Types.ObjectId(userId);
 
-      // If exams are updated, we need to recalculate student results
+      // If exams are updated, recalculate student results
       if (updateDto.exams && Array.isArray(updateDto.exams) && updateDto.exams.length > 0) {
         // Validate new exams
         const validExamIds = updateDto.exams.filter(examId => Types.ObjectId.isValid(examId));
@@ -777,11 +990,30 @@ export class CombineResultService {
         updateData.exams = validExamIds.map(id => new Types.ObjectId(id));
       }
 
+      // If category is updated, validate the category
+      if (updateDto.category && Types.ObjectId.isValid(updateDto.category)) {
+        const category = await this.examCategoryModel
+          .findById(updateDto.category)
+          .session(session)
+          .exec();
+        
+        if (!category) {
+          throw new NotFoundException('Exam category not found');
+        }
+
+        if (!category.isActive) {
+          throw new BadRequestException('Exam category is not active');
+        }
+
+        updateData.category = new Types.ObjectId(updateDto.category);
+      }
+
       const updatedResult = await this.combineResultModel
         .findByIdAndUpdate(id, updateData, { new: true, session })
         .populate('classDetails', 'classname')
         .populate('batchDetails', 'batchName sessionYear')
-        .populate('examDetails', 'examName totalMarks mcqMarks cqMarks writtenMarks examCategory')
+        .populate('examDetails', 'examName totalMarks mcqMarks cqMarks writtenMarks')
+        .populate('categoryDetails', 'categoryName description')
         .populate('createdByUser', 'email username role name')
         .populate('updatedByUser', 'email username role name')
         .exec();
@@ -866,7 +1098,8 @@ export class CombineResultService {
         .findById(result._id)
         .populate('classDetails', 'classname')
         .populate('batchDetails', 'batchName sessionYear')
-        .populate('examDetails', 'examName totalMarks examCategory')
+        .populate('examDetails', 'examName totalMarks')
+        .populate('categoryDetails', 'categoryName')
         .populate('createdByUser', 'email username role name')
         .populate('updatedByUser', 'email username role name')
         .exec();
@@ -911,7 +1144,8 @@ export class CombineResultService {
         .findById(result._id)
         .populate('classDetails', 'classname')
         .populate('batchDetails', 'batchName sessionYear')
-        .populate('examDetails', 'examName totalMarks examCategory')
+        .populate('examDetails', 'examName totalMarks')
+        .populate('categoryDetails', 'categoryName')
         .populate('createdByUser', 'email username role name')
         .populate('updatedByUser', 'email username role name')
         .exec();
@@ -942,6 +1176,7 @@ export class CombineResultService {
         .findById(combineResultId)
         .populate('classDetails', 'classname')
         .populate('batchDetails', 'batchName')
+        .populate('categoryDetails', 'categoryName')
         .exec();
 
       if (!combineResult) {
@@ -963,6 +1198,7 @@ export class CombineResultService {
             name: combineResult.name,
             class: (combineResult as any).classDetails,
             batches: (combineResult as any).batchDetails,
+            category: (combineResult as any).categoryDetails,
             totalMarks: combineResult.totalMarks,
             totalStudents: 0,
             statistics: {
@@ -1053,6 +1289,7 @@ export class CombineResultService {
           name: combineResult.name,
           class: (combineResult as any).classDetails,
           batches: (combineResult as any).batchDetails,
+          category: (combineResult as any).categoryDetails,
           totalMarks: combineResult.totalMarks,
           totalStudents: studentResults.length,
           statistics: {
@@ -1092,6 +1329,7 @@ export class CombineResultService {
       const classDetails = (result as any).classDetails as any;
       const batchDetails = (result as any).batchDetails as any[] || [];
       const examDetails = (result as any).examDetails as any[] || [];
+      const categoryDetails = (result as any).categoryDetails as any;
       const createdByUser = (result as any).createdByUser as any;
       const updatedByUser = (result as any).updatedByUser as any;
 
@@ -1114,9 +1352,16 @@ export class CombineResultService {
           mcqMarks: exam.mcqMarks || 0,
           cqMarks: exam.cqMarks || 0,
           writtenMarks: exam.writtenMarks || 0,
-          category: exam.examCategory || exam.category || '',
+          // Each exam now has its own populated category
+          category: {
+            _id: this.safeGetId(exam.examCategory?._id || exam.examCategory),
+            categoryName: exam.examCategory?.categoryName || '',
+          },
         })),
-        category: result.category,
+        category: {
+          _id: this.safeGetId(categoryDetails?._id || result.category),
+          categoryName: categoryDetails?.categoryName || '',
+        },
         startDate: result.startDate,
         endDate: result.endDate,
         totalMarks: result.totalMarks || 0,
@@ -1131,8 +1376,8 @@ export class CombineResultService {
           username: createdByUser?.username || '',
           role: createdByUser?.role || '',
         },
-        // createdAt: result.createdAt,
-        // updatedAt: result.updatedAt,
+        createdAt: result.createdAt,
+        updatedAt: result.updatedAt,
       };
 
       // Add updatedBy if exists

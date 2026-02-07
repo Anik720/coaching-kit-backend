@@ -1,12 +1,11 @@
-// dto/update-combine-result.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import { 
   IsString, 
   IsOptional, 
   IsArray, 
-  IsDateString, 
   IsEnum, 
-  IsBoolean 
+  IsBoolean,
+  IsMongoId
 } from 'class-validator';
 
 export class UpdateCombineResultDto {
@@ -26,13 +25,13 @@ export class UpdateCombineResultDto {
   exams?: string[];
 
   @ApiProperty({ 
-    example: 'mid_term', 
-    enum: ['class_test', 'mid_term', 'final', 'mock_test', 'custom'],
-    description: 'Updated category',
+    example: '67f1f77bcf86cd799439102', 
+    description: 'Updated exam category ID',
     required: false 
   })
-  @IsEnum(['class_test', 'mid_term', 'final', 'mock_test', 'custom'])
+  @IsString()
   @IsOptional()
+  @IsMongoId()
   category?: string;
 
   @ApiProperty({ example: true, description: 'Publish status', required: false })

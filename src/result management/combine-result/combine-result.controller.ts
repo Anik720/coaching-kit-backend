@@ -1,4 +1,3 @@
-// combine-result.controller.ts
 import {
   Controller,
   Get,
@@ -62,7 +61,7 @@ export class CombineResultController {
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
-    description: 'Class, batch, or exam not found',
+    description: 'Class, batch, exam, or category not found',
   })
   async create(
     @Body() createCombineResultDto: CreateCombineResultDto,
@@ -89,7 +88,7 @@ export class CombineResultController {
           examName: 'Class Test -29',
           class: { _id: '67f1f77bcf86cd799439011', classname: 'HSC 2027' },
           batches: [{ _id: '67f1f77bcf86cd799439012', batchName: 'SUN-3PM' }],
-          category: 'class_test',
+          category: { _id: '67f1f77bcf86cd799439101', categoryName: 'Class Test' },
           totalMarks: 30,
           mcqMarks: 0,
           cqMarks: 0,
@@ -126,7 +125,7 @@ export class CombineResultController {
     name: 'category',
     required: false,
     type: String,
-    description: 'Filter by category',
+    description: 'Filter by category ID',
   })
   @ApiQuery({
     name: 'isPublished',
@@ -184,7 +183,7 @@ export class CombineResultController {
             exams: [
               { _id: '67f1f77bcf86cd799439021', examName: 'Class Test -29', totalMarks: 30 },
             ],
-            category: 'class_test',
+            category: { _id: '67f1f77bcf86cd799439101', categoryName: 'Class Test' },
             totalMarks: 60,
             isActive: true,
             isPublished: true,
@@ -475,6 +474,7 @@ export class CombineResultController {
           name: 'HSC 2027 Combined Result',
           class: { _id: '67f1f77bcf86cd799439011', classname: 'HSC 2027' },
           batches: [{ _id: '67f1f77bcf86cd799439012', batchName: 'SAT-2PM' }],
+          category: { _id: '67f1f77bcf86cd799439101', categoryName: 'Class Test' },
           totalMarks: 60,
           totalStudents: 50,
           statistics: {
@@ -521,48 +521,30 @@ export class CombineResultController {
     return this.combineResultService.getStatistics(id);
   }
 
-  @Get('class/:classId/batches')
+  @Get('exam-categories')
   @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.TEACHER, UserRole.STAFF)
-  @ApiOperation({ summary: 'Get batches for a specific class' })
-  @ApiParam({
-    name: 'classId',
-    description: 'Class ID',
-    example: '67f1f77bcf86cd799439011',
-  })
-  @ApiQuery({
-    name: 'activeOnly',
-    required: false,
-    type: Boolean,
-    description: 'Get only active batches',
-  })
+  @ApiOperation({ summary: 'Get all active exam categories for dropdown' })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Batches retrieved successfully',
+    description: 'Exam categories retrieved successfully',
     schema: {
       example: [
         {
-          _id: '67f1f77bcf86cd799439012',
-          batchName: 'SAT-2PM',
-          sessionYear: '2024-2025',
-          status: 'active',
+          _id: '67f1f77bcf86cd799439101',
+          categoryName: 'Class Test',
+          description: 'Regular class tests',
           isActive: true,
         },
         {
-          _id: '67f1f77bcf86cd799439013',
-          batchName: 'SUN-3PM',
-          sessionYear: '2024-2025',
-          status: 'active',
+          _id: '67f1f77bcf86cd799439102',
+          categoryName: 'Mid Term',
+          description: 'Mid-term examinations',
           isActive: true,
         },
       ],
     },
   })
-  async getClassBatches(
-    @Param('classId') classId: string,
-    @Query('activeOnly') activeOnly?: boolean,
-  ) {
-    // This endpoint would need to be implemented in a separate service
-    // For now, returning a placeholder
-    return [];
+  async getExamCategories() {
+    return this.combineResultService.getExamCategories();
   }
 }

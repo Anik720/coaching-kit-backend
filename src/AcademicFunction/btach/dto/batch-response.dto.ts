@@ -115,8 +115,8 @@ export class BatchResponseDto {
   @ApiPropertyOptional()
   daysRemaining?: number;
 
-  @ApiPropertyOptional()
-  isActiveSession?: boolean;
+  // @ApiPropertyOptional()
+  // isActiveSession?: boolean;
 }
 
 export class BatchListResponseDto {

@@ -1,4 +1,3 @@
-// combine-result.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
@@ -36,12 +35,12 @@ export class CombineResult {
   exams: Types.ObjectId[];
 
   @Prop({
-    type: String,
-    enum: ['class_test', 'mid_term', 'final', 'mock_test', 'custom'],
+    type: Types.ObjectId,
+    ref: 'ExamCategory',
     required: true,
     index: true,
   })
-  category: string;
+  category: Types.ObjectId;
 
   @Prop({
     type: Date,
@@ -108,10 +107,18 @@ export class CombineResult {
   })
   isPublished: boolean;
 
-  // Virtual fields
+  // ────────────────────────────────────────────────
+  // Explicitly declare timestamps fields
+  // (required when using timestamps: true + strict TypeScript)
+  // ────────────────────────────────────────────────
+  createdAt: Date;
+  updatedAt: Date;
+
+  // Virtual fields (these are populated at runtime)
   classDetails?: any;
   batchDetails?: any[];
   examDetails?: any[];
+  categoryDetails?: any;
   createdByUser?: any;
   updatedByUser?: any;
   studentResults?: any[];
@@ -119,7 +126,7 @@ export class CombineResult {
 
 export const CombineResultSchema = SchemaFactory.createForClass(CombineResult);
 
-// Create compound indexes
+// Compound indexes
 CombineResultSchema.index({ class: 1, batches: 1 });
 CombineResultSchema.index({ createdBy: 1, createdAt: -1 });
 CombineResultSchema.index({ category: 1, isPublished: 1 });
@@ -142,6 +149,13 @@ CombineResultSchema.virtual('examDetails', {
   ref: 'Exam',
   localField: 'exams',
   foreignField: '_id',
+});
+
+CombineResultSchema.virtual('categoryDetails', {
+  ref: 'ExamCategory',
+  localField: 'category',
+  foreignField: '_id',
+  justOne: true,
 });
 
 CombineResultSchema.virtual('createdByUser', {
