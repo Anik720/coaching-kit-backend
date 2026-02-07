@@ -4,7 +4,6 @@ import {
   ConflictException,
   BadRequestException,
   InternalServerErrorException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, ClientSession } from 'mongoose';
@@ -18,7 +17,10 @@ import { IResultStats, IResultSummary, IBulkResultResponse, IStudentResult } fro
 import { Result, ResultDocument } from './result.schema';
 import { Exam, ExamDocument } from '../create-exam/exam.schema';
 import { Student, StudentDocument } from 'src/student/schemas/student.schema';
+
 import { ResultResponseDto } from './dto/result-response.dto';
+import { Subject } from 'rxjs';
+import { SubjectDocument } from 'src/AcademicFunction/subject/subject.schema';
 
 interface ErrorEntry {
   studentId: string;
@@ -31,17 +33,109 @@ export class ResultService {
     @InjectModel(Result.name) private resultModel: Model<ResultDocument>,
     @InjectModel(Exam.name) private examModel: Model<ExamDocument>,
     @InjectModel(Student.name) private studentModel: Model<StudentDocument>,
+    @InjectModel(Subject.name) private subjectModel: Model<SubjectDocument>,
   ) {}
+
+  // Grading System Configuration based on your screenshot
+  private readonly GRADING_SYSTEM = [
+    { min: 80, max: 100, grade: 'A+', gpa: 5, passed: true },
+    { min: 70, max: 79, grade: 'A', gpa: 4, passed: true },
+    { min: 60, max: 69, grade: 'A-', gpa: 3.5, passed: true },
+    { min: 50, max: 59, grade: 'B', gpa: 3, passed: true },
+    { min: 40, max: 49, grade: 'C', gpa: 2, passed: true },
+    { min: 33, max: 39, grade: 'D', gpa: 1, passed: true },
+    { min: 0, max: 32, grade: 'F', gpa: 0, passed: false }
+  ];
+
+  // Helper: Calculate grade, GPA, and pass status based on percentage
+  private calculateGradeInfo(percentage: number): { grade: string; gpa: number; isPassed: boolean } {
+    // Find the matching grade from grading system
+    const gradeInfo = this.GRADING_SYSTEM.find(grade => 
+      percentage >= grade.min && percentage <= grade.max
+    );
+    
+    if (!gradeInfo) {
+      return { grade: 'F', gpa: 0, isPassed: false };
+    }
+    
+    return {
+      grade: gradeInfo.grade,
+      gpa: gradeInfo.gpa,
+      isPassed: gradeInfo.passed
+    };
+  }
+
+  // Helper: Calculate remarks based on grade
+  private calculateRemarks(grade: string): string {
+    const remarksMap: Record<string, string> = {
+      'A+': 'Outstanding performance',
+      'A': 'Excellent performance',
+      'A-': 'Very good performance',
+      'B': 'Good performance',
+      'C': 'Satisfactory performance',
+      'D': 'Passed but needs improvement',
+      'F': 'Failed - Needs to try harder'
+    };
+    return remarksMap[grade] || '';
+  }
+
+  // Helper: Calculate result class based on percentage
+  private calculateResultClass(percentage: number): string {
+    if (percentage >= 80) return 'distinction';
+    if (percentage >= 60) return 'first_class';
+    if (percentage >= 45) return 'second_class';
+    if (percentage >= 33) return 'third_class';
+    return 'failed';
+  }
+
+  // Helper: Legacy methods for backward compatibility
+  private calculateGrade(percentage: number): string {
+    return this.calculateGradeInfo(percentage).grade;
+  }
+
+  private calculateGPA(percentage: number): number {
+    return this.calculateGradeInfo(percentage).gpa;
+  }
+
+  private determinePassStatus(percentage: number): boolean {
+    return percentage >= 33;
+  }
 
   private mapToResponseDto(result: ResultDocument | any): ResultResponseDto {
     try {
-      // Handle cases where references might not be populated
       const examDetails = (result as any).examDetails as any;
       const studentDetails = (result as any).studentDetails as any;
       const classDetails = (result as any).classDetails as any;
       const batchDetails = (result as any).batchDetails as any;
       const createdByUser = (result as any).createdByUser as any;
       const updatedByUser = (result as any).updatedByUser as any;
+      const subjectDetails = (result as any).subjectDetails as any[];
+
+      let subjectWiseMarks = [];
+      if (result.subjectWiseMarks && result.subjectWiseMarks.length > 0) {
+        if (subjectDetails && subjectDetails.length > 0) {
+          subjectWiseMarks = result.subjectWiseMarks.map((mark: any, index: number) => {
+            const subjectDetail = subjectDetails.find((s: any) => 
+              s && mark.subject && s._id.toString() === mark.subject.toString()
+            );
+            return {
+              subject: mark.subject?.toString() || '',
+              subjectName: subjectDetail?.subjectName || mark.subjectName || '',
+              totalMarks: mark.totalMarks || 0,
+              obtainedMarks: mark.obtainedMarks || 0,
+              percentage: mark.totalMarks > 0 ? (mark.obtainedMarks / mark.totalMarks) * 100 : 0
+            };
+          });
+        } else {
+          subjectWiseMarks = result.subjectWiseMarks.map((mark: any) => ({
+            subject: mark.subject?.toString() || '',
+            subjectName: mark.subjectName || '',
+            totalMarks: mark.totalMarks || 0,
+            obtainedMarks: mark.obtainedMarks || 0,
+            percentage: mark.totalMarks > 0 ? (mark.obtainedMarks / mark.totalMarks) * 100 : 0
+          }));
+        }
+      }
 
       const response: ResultResponseDto = {
         _id: result._id.toString(),
@@ -79,7 +173,7 @@ export class ResultService {
         isAbsent: result.isAbsent,
         resultClass: result.resultClass,
         remarks: result.remarks,
-        subjectWiseMarks: result.subjectWiseMarks || [],
+        subjectWiseMarks: subjectWiseMarks,
         createdBy: {
           _id: createdByUser?._id?.toString() || result.createdBy.toString(),
           email: createdByUser?.email || '',
@@ -92,7 +186,6 @@ export class ResultService {
         updatedAt: result.updatedAt,
       };
 
-      // Add updatedBy if exists
       if (updatedByUser || result.updatedBy) {
         response.updatedBy = {
           _id: updatedByUser?._id?.toString() || result.updatedBy?.toString() || '',
@@ -116,13 +209,20 @@ export class ResultService {
 
     try {
       console.log('Creating result for student:', createResultDto.student);
+      console.log('User ID received:', userId);
 
-      // Validate user ID
       if (!Types.ObjectId.isValid(userId)) {
         throw new BadRequestException('Invalid user ID');
       }
+      
+      let userObjectId: Types.ObjectId;
+      try {
+        userObjectId = new Types.ObjectId(userId);
+      } catch (error) {
+        console.error('Failed to create ObjectId from userId:', userId, error);
+        throw new BadRequestException('Invalid user ID format');
+      }
 
-      // Validate all IDs
       const idsToValidate = [
         { field: 'exam', id: createResultDto.exam },
         { field: 'student', id: createResultDto.student },
@@ -136,7 +236,6 @@ export class ResultService {
         }
       }
 
-      // Check if result already exists for this student in this exam
       const existingResult = await this.resultModel.findOne({
         exam: new Types.ObjectId(createResultDto.exam),
         student: new Types.ObjectId(createResultDto.student),
@@ -146,7 +245,6 @@ export class ResultService {
         throw new ConflictException('Result already exists for this student in this exam');
       }
 
-      // Get exam details
       const exam = await this.examModel
         .findById(createResultDto.exam)
         .session(session)
@@ -156,17 +254,14 @@ export class ResultService {
         throw new NotFoundException('Exam not found');
       }
 
-      // Validate total marks
       if (createResultDto.totalMarks !== exam.totalMarks) {
         throw new BadRequestException(`Total marks must be ${exam.totalMarks} as per exam configuration`);
       }
 
-      // Validate obtained marks don't exceed total marks
       if (createResultDto.obtainedMarks > createResultDto.totalMarks) {
         throw new BadRequestException('Obtained marks cannot exceed total marks');
       }
 
-      // Get student details
       const student = await this.studentModel
         .findById(createResultDto.student)
         .session(session)
@@ -176,39 +271,100 @@ export class ResultService {
         throw new NotFoundException('Student not found');
       }
 
-      // Calculate percentage
-      const percentage = (createResultDto.obtainedMarks / createResultDto.totalMarks) * 100;
+      if (createResultDto.subjectWiseMarks && createResultDto.subjectWiseMarks.length > 0) {
+        const subjectIds = createResultDto.subjectWiseMarks.map(sm => sm.subject);
+        const uniqueSubjectIds = [...new Set(subjectIds)];
+        
+        const subjects = await this.subjectModel
+          .find({ _id: { $in: uniqueSubjectIds.map(id => new Types.ObjectId(id)) } })
+          .session(session)
+          .exec();
 
-      // Determine pass/fail based on exam configuration
-      let isPassed = false;
-      if (createResultDto.isAbsent) {
-        isPassed = false;
-      } else if (exam.enableGrading && exam.totalPassMarks !== undefined) {
-        isPassed = createResultDto.obtainedMarks >= exam.totalPassMarks;
-      } else {
-        // Default passing criteria (40%)
-        isPassed = percentage >= 40;
-      }
+        if (subjects.length !== uniqueSubjectIds.length) {
+          throw new BadRequestException('One or more subjects not found');
+        }
 
-      // Calculate grade and GPA if enabled
-      let grade = createResultDto.grade;
-      let gpa = createResultDto.gpa;
-      
-      if (exam.enableGrading) {
-        if (!grade && exam.useGPASystem) {
-          // Calculate GPA based on percentage (simplified)
-          const calculatedGrade = this.calculateGrade(percentage);
-          const calculatedGPA = this.calculateGPA(percentage);
-          grade = calculatedGrade;
-          gpa = calculatedGPA;
-        } else if (!grade) {
-          const calculatedGrade = this.calculateGrade(percentage);
-          grade = calculatedGrade;
+        const subjectMap = new Map<string, string>();
+        subjects.forEach((subject: any) => {
+          subjectMap.set(subject._id.toString(), subject.subjectName);
+        });
+
+        createResultDto.subjectWiseMarks.forEach((mark, index) => {
+          if (!Types.ObjectId.isValid(mark.subject)) {
+            throw new BadRequestException(`Invalid subject ID at index ${index}`);
+          }
+          
+          if (mark.obtainedMarks > mark.totalMarks) {
+            throw new BadRequestException(
+              `Obtained marks (${mark.obtainedMarks}) exceed total marks (${mark.totalMarks}) for subject ${mark.subjectName || mark.subject}`
+            );
+          }
+
+          if (mark.subjectName && subjectMap.has(mark.subject)) {
+            const actualSubjectName = subjectMap.get(mark.subject);
+            if (mark.subjectName !== actualSubjectName) {
+              console.warn(`Subject name mismatch for ${mark.subject}: provided "${mark.subjectName}", actual "${actualSubjectName}"`);
+            }
+          }
+        });
+
+        const subjectTotal = createResultDto.subjectWiseMarks.reduce((sum, sm) => sum + sm.totalMarks, 0);
+        const subjectObtained = createResultDto.subjectWiseMarks.reduce((sum, sm) => sum + sm.obtainedMarks, 0);
+        
+        if (Math.abs(subjectTotal - createResultDto.totalMarks) > 0.01) {
+          throw new BadRequestException(
+            `Sum of subject-wise total marks (${subjectTotal}) must equal overall total marks (${createResultDto.totalMarks})`
+          );
+        }
+        
+        if (Math.abs(subjectObtained - createResultDto.obtainedMarks) > 0.01) {
+          throw new BadRequestException(
+            `Sum of subject-wise obtained marks (${subjectObtained}) must equal overall obtained marks (${createResultDto.obtainedMarks})`
+          );
         }
       }
 
-      // Determine result class
-      const resultClass = this.determineResultClass(percentage);
+      // Calculate percentage
+      const percentage = (createResultDto.obtainedMarks / createResultDto.totalMarks) * 100;
+
+      // AUTO-CALCULATION: Grade, GPA, Pass Status, Remarks, Result Class
+      let grade = createResultDto.grade;
+      let gpa = createResultDto.gpa;
+      let isPassed = false;
+      let remarks = createResultDto.remarks;
+      let resultClass = createResultDto.resultClass;
+      
+      // Calculate based on grading system if exam has grading enabled
+      if (exam.enableGrading) {
+        const gradeInfo = this.calculateGradeInfo(percentage);
+        
+        if (!grade) {
+          grade = gradeInfo.grade;
+        }
+        
+        if (exam.useGPASystem && !gpa) {
+          gpa = gradeInfo.gpa;
+        }
+        
+        isPassed = gradeInfo.isPassed;
+        
+        if (!remarks) {
+          remarks = this.calculateRemarks(grade);
+        }
+      } else {
+        isPassed = !createResultDto.isAbsent && this.determinePassStatus(percentage);
+      }
+
+      if (!resultClass) {
+        resultClass = this.calculateResultClass(percentage);
+      }
+
+      const subjectWiseMarksForDb = createResultDto.subjectWiseMarks?.map(mark => ({
+        subject: new Types.ObjectId(mark.subject),
+        subjectName: mark.subjectName,
+        totalMarks: mark.totalMarks,
+        obtainedMarks: mark.obtainedMarks,
+      })) || [];
 
       const result = new this.resultModel({
         exam: new Types.ObjectId(createResultDto.exam),
@@ -223,26 +379,25 @@ export class ResultService {
         isPassed,
         isAbsent: createResultDto.isAbsent || false,
         resultClass,
-        remarks: createResultDto.remarks,
-        subjectWiseMarks: createResultDto.subjectWiseMarks || [],
-        createdBy: new Types.ObjectId(userId),
+        remarks: remarks || '',
+        subjectWiseMarks: subjectWiseMarksForDb,
+        createdBy: userObjectId,
         isActive: true,
       });
 
       const savedResult = await result.save({ session });
 
-      // Update position after saving all results
       await this.updatePositions(createResultDto.exam, session);
 
       await session.commitTransaction();
       
-      // Populate and return
       const populatedResult = await this.resultModel
         .findById(savedResult._id)
         .populate('examDetails')
         .populate('studentDetails')
         .populate('classDetails')
         .populate('batchDetails')
+        .populate('subjectDetails', 'subjectName subjectCode creditHours')
         .populate('createdByUser', 'email username role name')
         .populate('updatedByUser', 'email username role name')
         .exec();
@@ -274,17 +429,14 @@ export class ResultService {
       console.log('Bulk creating results for exam:', bulkCreateResultDto.exam_id);
       console.log('Number of student results:', Object.keys(bulkCreateResultDto.results).length);
 
-      // Validate user ID
       if (!Types.ObjectId.isValid(userId)) {
         throw new BadRequestException('Invalid user ID');
       }
 
-      // Validate exam ID
       if (!Types.ObjectId.isValid(bulkCreateResultDto.exam_id)) {
         throw new BadRequestException('Invalid exam ID');
       }
 
-      // Get exam details
       const exam = await this.examModel
         .findById(bulkCreateResultDto.exam_id)
         .session(session)
@@ -294,7 +446,6 @@ export class ResultService {
         throw new NotFoundException('Exam not found');
       }
 
-      // Get class and batch from first student (assuming all students are from same class/batch)
       const studentIds = Object.keys(bulkCreateResultDto.results);
       if (studentIds.length === 0) {
         throw new BadRequestException('No student results provided');
@@ -313,7 +464,6 @@ export class ResultService {
       const classId = firstStudent.class;
       const batchId = firstStudent.batch;
 
-      // Validate all students exist and belong to same class/batch
       const studentPromises = studentIds.map(async (studentId) => {
         if (!Types.ObjectId.isValid(studentId)) {
           throw new BadRequestException(`Invalid student ID: ${studentId}`);
@@ -328,7 +478,6 @@ export class ResultService {
           throw new NotFoundException(`Student with ID ${studentId} not found`);
         }
 
-        // Verify student belongs to same class and batch
         if (!student.class.equals(classId) || !student.batch.equals(batchId)) {
           throw new BadRequestException(`Student ${studentId} does not belong to the same class/batch`);
         }
@@ -338,7 +487,6 @@ export class ResultService {
 
       await Promise.all(studentPromises);
 
-      // Process each student result
       const resultsToSave: Promise<ResultDocument>[] = [];
       const errors: ErrorEntry[] = [];
       let successCount = 0;
@@ -346,14 +494,12 @@ export class ResultService {
 
       for (const [studentId, resultData] of Object.entries(bulkCreateResultDto.results)) {
         try {
-          // Validate student ID
           if (!Types.ObjectId.isValid(studentId)) {
             errors.push({ studentId, error: 'Invalid student ID format' });
             failedCount++;
             continue;
           }
 
-          // Check if result already exists
           const existingResult = await this.resultModel.findOne({
             exam: new Types.ObjectId(bulkCreateResultDto.exam_id),
             student: new Types.ObjectId(studentId),
@@ -365,7 +511,6 @@ export class ResultService {
             continue;
           }
 
-          // Parse marks from string to number
           const obtainedMarks = parseFloat(resultData.only_total_marks.toString());
           if (isNaN(obtainedMarks)) {
             errors.push({ studentId, error: 'Invalid marks format' });
@@ -373,53 +518,40 @@ export class ResultService {
             continue;
           }
 
-          // Validate marks don't exceed exam total
           if (obtainedMarks > exam.totalMarks) {
             errors.push({ studentId, error: `Obtained marks (${obtainedMarks}) exceed exam total marks (${exam.totalMarks})` });
             failedCount++;
             continue;
           }
 
-          // Calculate percentage
           const percentage = (obtainedMarks / exam.totalMarks) * 100;
 
-          // Determine pass/fail
+          // AUTO-CALCULATION FOR BULK CREATE
           let isPassed = false;
-          if (resultData.is_absent) {
-            isPassed = false;
-          } else if (exam.enableGrading && exam.totalPassMarks !== undefined) {
-            isPassed = obtainedMarks >= exam.totalPassMarks;
-          } else {
-            isPassed = percentage >= 40;
-          }
+          let grade: string | undefined = resultData.grade && resultData.grade !== 'N/A' ? resultData.grade : undefined;
+          let gpa: number | undefined = resultData.gpa && resultData.gpa !== 'N/A' ? parseFloat(resultData.gpa) : undefined;
+          let remarks = '';
+          let resultClass = '';
 
-          let grade: string | undefined =
-                resultData.grade && resultData.grade !== 'N/A'
-                    ? resultData.grade
-                    : undefined;
-
-                let gpa: number | undefined =
-                resultData.gpa && resultData.gpa !== 'N/A'
-                    ? parseFloat(resultData.gpa)
-                    : undefined;
-
-          
-          if (exam.enableGrading && !grade) {
-            if (exam.useGPASystem) {
-              const calculatedGrade = this.calculateGrade(percentage);
-              const calculatedGPA = this.calculateGPA(percentage);
-              grade = calculatedGrade;
-              gpa = calculatedGPA;
-            } else {
-              const calculatedGrade = this.calculateGrade(percentage);
-              grade = calculatedGrade;
+          if (exam.enableGrading) {
+            const gradeInfo = this.calculateGradeInfo(percentage);
+            
+            if (!grade) {
+              grade = gradeInfo.grade;
             }
+            
+            if (exam.useGPASystem && !gpa) {
+              gpa = gradeInfo.gpa;
+            }
+            
+            isPassed = gradeInfo.isPassed;
+            remarks = this.calculateRemarks(grade);
+          } else {
+            isPassed = !resultData.is_absent && this.determinePassStatus(percentage);
           }
 
-          // Determine result class
-          const resultClass = this.determineResultClass(percentage);
+          resultClass = this.calculateResultClass(percentage);
 
-          // Create result object
           const result = new this.resultModel({
             exam: new Types.ObjectId(bulkCreateResultDto.exam_id),
             student: new Types.ObjectId(studentId),
@@ -433,6 +565,7 @@ export class ResultService {
             isPassed,
             isAbsent: resultData.is_absent || false,
             resultClass,
+            remarks,
             createdBy: new Types.ObjectId(userId),
             isActive: true,
           });
@@ -449,15 +582,12 @@ export class ResultService {
         }
       }
 
-      // Save all results
       const savedResults = await Promise.all(resultsToSave);
 
-      // Update positions
       await this.updatePositions(bulkCreateResultDto.exam_id, session);
 
       await session.commitTransaction();
 
-      // Populate saved results for response
       const populatedResults = await this.resultModel
         .find({
           _id: { $in: savedResults.map(r => r._id) }
@@ -466,6 +596,7 @@ export class ResultService {
         .populate('studentDetails')
         .populate('classDetails')
         .populate('batchDetails')
+        .populate('subjectDetails', 'subjectName subjectCode creditHours')
         .populate('createdByUser', 'email username role name')
         .exec();
 
@@ -503,6 +634,7 @@ export class ResultService {
         student,
         class: classId,
         batch: batchId,
+        subject,
         grade,
         isPassed,
         isAbsent,
@@ -516,13 +648,13 @@ export class ResultService {
 
       const filter: any = {};
 
-      // Build filter
       if (search) {
         filter.$or = [
           { 'studentDetails.registrationId': { $regex: search, $options: 'i' } },
           { 'studentDetails.nameEnglish': { $regex: search, $options: 'i' } },
           { 'examDetails.examName': { $regex: search, $options: 'i' } },
           { grade: { $regex: search, $options: 'i' } },
+          { 'subjectWiseMarks.subjectName': { $regex: search, $options: 'i' } },
         ];
       }
 
@@ -540,6 +672,10 @@ export class ResultService {
 
       if (batchId && Types.ObjectId.isValid(batchId)) {
         filter.batch = new Types.ObjectId(batchId);
+      }
+
+      if (subject && Types.ObjectId.isValid(subject)) {
+        filter['subjectWiseMarks.subject'] = new Types.ObjectId(subject);
       }
 
       if (grade) {
@@ -576,6 +712,7 @@ export class ResultService {
           .populate('studentDetails')
           .populate('classDetails')
           .populate('batchDetails')
+          .populate('subjectDetails', 'subjectName subjectCode creditHours')
           .populate('createdByUser', 'email username role name')
           .populate('updatedByUser', 'email username role name')
           .sort(sort)
@@ -610,6 +747,7 @@ export class ResultService {
         .populate('studentDetails')
         .populate('classDetails')
         .populate('batchDetails')
+        .populate('subjectDetails', 'subjectName subjectCode creditHours')
         .populate('createdByUser', 'email username role name')
         .populate('updatedByUser', 'email username role name')
         .exec();
@@ -647,6 +785,7 @@ export class ResultService {
         .populate('studentDetails')
         .populate('classDetails')
         .populate('batchDetails')
+        .populate('subjectDetails', 'subjectName subjectCode creditHours')
         .populate('createdByUser', 'email username role name')
         .populate('updatedByUser', 'email username role name')
         .exec();
@@ -675,7 +814,6 @@ export class ResultService {
         throw new BadRequestException('Invalid result ID');
       }
 
-      // Check if result exists
       const existingResult = await this.resultModel
         .findById(id)
         .populate('examDetails')
@@ -688,51 +826,56 @@ export class ResultService {
 
       const exam = existingResult.examDetails as any;
 
-      // Prepare update data
       const updateData: any = { ...updateResultDto };
       
-      // Validate marks if updating
-      if (updateResultDto.obtainedMarks !== undefined) {
-        if (updateResultDto.obtainedMarks > existingResult.totalMarks) {
+      if (updateResultDto.obtainedMarks !== undefined || updateResultDto.totalMarks !== undefined) {
+        const totalMarks = updateResultDto.totalMarks !== undefined ? updateResultDto.totalMarks : existingResult.totalMarks;
+        const obtainedMarks = updateResultDto.obtainedMarks !== undefined ? updateResultDto.obtainedMarks : existingResult.obtainedMarks;
+        
+        if (obtainedMarks > totalMarks) {
           throw new BadRequestException('Obtained marks cannot exceed total marks');
         }
 
-        // Calculate percentage
-        const percentage = (updateResultDto.obtainedMarks / existingResult.totalMarks) * 100;
+        const percentage = (obtainedMarks / totalMarks) * 100;
         updateData.percentage = percentage;
+        updateData.totalMarks = totalMarks;
+        updateData.obtainedMarks = obtainedMarks;
         
-        // Determine pass/fail
-        let isPassed = false;
-        if (updateResultDto.isAbsent) {
-          isPassed = false;
-        } else if (exam.enableGrading && exam.totalPassMarks !== undefined) {
-          isPassed = updateResultDto.obtainedMarks >= exam.totalPassMarks;
-        } else {
-          isPassed = percentage >= 40;
-        }
-        updateData.isPassed = isPassed;
-
-        // Calculate grade and GPA if enabled
+        // AUTO-RECALCULATION ON UPDATE
         if (exam.enableGrading) {
-          if (!updateResultDto.grade && exam.useGPASystem) {
-            const calculatedGrade = this.calculateGrade(percentage);
-            const calculatedGPA = this.calculateGPA(percentage);
-            updateData.grade = calculatedGrade;
-            updateData.gpa = calculatedGPA;
-          } else if (!updateResultDto.grade) {
-            const calculatedGrade = this.calculateGrade(percentage);
-            updateData.grade = calculatedGrade;
+          const gradeInfo = this.calculateGradeInfo(percentage);
+          
+          if (!updateResultDto.grade) {
+            updateData.grade = gradeInfo.grade;
           }
+          
+          if (exam.useGPASystem && !updateResultDto.gpa) {
+            updateData.gpa = gradeInfo.gpa;
+          }
+          
+          updateData.isPassed = gradeInfo.isPassed;
+          
+          if (!updateResultDto.remarks) {
+            updateData.remarks = this.calculateRemarks(updateData.grade || gradeInfo.grade);
+          }
+        } else {
+          updateData.isPassed = !updateResultDto.isAbsent && this.determinePassStatus(percentage);
         }
-
-        // Determine result class
+        
         if (!updateResultDto.resultClass) {
-          const resultClass = this.determineResultClass(percentage);
-          updateData.resultClass = resultClass;
+          updateData.resultClass = this.calculateResultClass(percentage);
         }
       }
       
-      // Add updatedBy if userId is provided
+      if (updateResultDto.subjectWiseMarks && updateResultDto.subjectWiseMarks.length > 0) {
+        updateData.subjectWiseMarks = updateResultDto.subjectWiseMarks.map(mark => ({
+          subject: new Types.ObjectId(mark.subject),
+          subjectName: mark.subjectName,
+          totalMarks: mark.totalMarks,
+          obtainedMarks: mark.obtainedMarks,
+        }));
+      }
+      
       if (userId) {
         if (!Types.ObjectId.isValid(userId)) {
           throw new BadRequestException('Invalid user ID');
@@ -746,11 +889,11 @@ export class ResultService {
         .populate('studentDetails')
         .populate('classDetails')
         .populate('batchDetails')
+        .populate('subjectDetails', 'subjectName subjectCode creditHours')
         .populate('createdByUser', 'email username role name')
         .populate('updatedByUser', 'email username role name')
         .exec();
 
-      // Update positions if marks were changed
       if (updateResultDto.obtainedMarks !== undefined) {
         await this.updatePositions(existingResult.exam.toString(), session);
       }
@@ -805,7 +948,7 @@ export class ResultService {
 
       const {
         page = 1,
-        limit = 100, // Higher limit for exam results
+        limit = 100,
         sortBy = 'position',
         sortOrder = 'asc',
         ...otherFilters
@@ -830,6 +973,7 @@ export class ResultService {
           .populate('studentDetails')
           .populate('classDetails')
           .populate('batchDetails')
+          .populate('subjectDetails', 'subjectName subjectCode creditHours')
           .populate('createdByUser', 'email username role name')
           .populate('updatedByUser', 'email username role name')
           .sort(sort)
@@ -894,6 +1038,7 @@ export class ResultService {
           .populate('studentDetails')
           .populate('classDetails')
           .populate('batchDetails')
+          .populate('subjectDetails', 'subjectName subjectCode creditHours')
           .populate('createdByUser', 'email username role name')
           .populate('updatedByUser', 'email username role name')
           .sort(sort)
@@ -925,13 +1070,11 @@ export class ResultService {
         throw new BadRequestException('Invalid exam ID');
       }
 
-      // Get exam details
       const exam = await this.examModel.findById(examId).exec();
       if (!exam) {
         throw new NotFoundException('Exam not found');
       }
 
-      // Get all results for this exam
       const results = await this.resultModel
         .find({ exam: new Types.ObjectId(examId) })
         .populate('studentDetails')
@@ -959,7 +1102,6 @@ export class ResultService {
         };
       }
 
-      // Calculate statistics
       const presentResults = results.filter(r => !r.isAbsent);
       const passedResults = results.filter(r => r.isPassed);
       const failedResults = results.filter(r => !r.isPassed && !r.isAbsent);
@@ -970,7 +1112,6 @@ export class ResultService {
       const highestMarks = presentResults.length > 0 ? Math.max(...presentResults.map(r => r.obtainedMarks)) : 0;
       const lowestMarks = presentResults.length > 0 ? Math.min(...presentResults.map(r => r.obtainedMarks)) : 0;
 
-      // Get top 5 performers
       const topPerformers = results
         .slice(0, 5)
         .map((result, index) => {
@@ -1065,7 +1206,6 @@ export class ResultService {
       const highestMarks = presentResults.length > 0 ? Math.max(...presentResults.map(r => r.obtainedMarks)) : 0;
       const lowestMarks = presentResults.length > 0 ? Math.min(...presentResults.map(r => r.obtainedMarks)) : 0;
 
-      // Calculate grade distribution
       const gradeDistribution: Record<string, number> = {};
       results.forEach(result => {
         if (result.grade) {
@@ -1092,17 +1232,14 @@ export class ResultService {
     }
   }
 
-  // Helper methods
   private async updatePositions(examId: string, session?: ClientSession): Promise<void> {
     try {
-      // Get all results for this exam, sorted by obtained marks (descending)
       const results = await this.resultModel
         .find({ exam: new Types.ObjectId(examId), isAbsent: false })
         .sort({ obtainedMarks: -1 })
         .session(session || null)
         .exec();
 
-      // Update positions (handling ties)
       let currentPosition = 1;
       let previousMarks: number | null = null;
       let sameRankCount = 0;
@@ -1128,7 +1265,6 @@ export class ResultService {
         previousMarks = result.obtainedMarks;
       }
 
-      // Set position for absent students
       await this.resultModel
         .updateMany(
           { exam: new Types.ObjectId(examId), isAbsent: true },
@@ -1140,34 +1276,6 @@ export class ResultService {
       console.error('Update positions error:', error);
       throw new InternalServerErrorException('Failed to update positions');
     }
-  }
-
-  private calculateGrade(percentage: number): string {
-    if (percentage >= 80) return 'A+';
-    if (percentage >= 70) return 'A';
-    if (percentage >= 60) return 'A-';
-    if (percentage >= 50) return 'B';
-    if (percentage >= 40) return 'C';
-    if (percentage >= 33) return 'D';
-    return 'F';
-  }
-
-  private calculateGPA(percentage: number): number {
-    if (percentage >= 80) return 5.0;
-    if (percentage >= 70) return 4.0;
-    if (percentage >= 60) return 3.5;
-    if (percentage >= 50) return 3.0;
-    if (percentage >= 40) return 2.0;
-    if (percentage >= 33) return 1.0;
-    return 0.0;
-  }
-
-  private determineResultClass(percentage: number): string {
-    if (percentage >= 80) return 'distinction';
-    if (percentage >= 60) return 'first_class';
-    if (percentage >= 45) return 'second_class';
-    if (percentage >= 33) return 'third_class';
-    return 'failed';
   }
 
   async toggleActive(id: string, userId: string): Promise<ResultResponseDto> {
@@ -1196,6 +1304,7 @@ export class ResultService {
         .populate('studentDetails')
         .populate('classDetails')
         .populate('batchDetails')
+        .populate('subjectDetails', 'subjectName subjectCode creditHours')
         .populate('createdByUser', 'email username role name')
         .populate('updatedByUser', 'email username role name')
         .exec();
@@ -1211,54 +1320,51 @@ export class ResultService {
     }
   }
 
-  // Get students for result entry (based on class and batch)
-async getStudentsForResultEntry(classId: string, batchId: string): Promise<IStudentResult[]> {
-  try {
-    console.log('Querying for class:', classId, 'batch:', batchId);
-    
-    // Query for STRING values (not ObjectId)
-    const students = await this.studentModel
-      .find({
-        class: classId,  // Query for string, not ObjectId
-        batch: batchId,   // Query for string, not ObjectId
-        isActive: true,
-        status: 'active',
-      })
-      .lean()
-      .sort({ registrationId: 1 })
-      .exec();
+  async getStudentsForResultEntry(classId: string, batchId: string): Promise<IStudentResult[]> {
+    try {
+      console.log('Querying for class:', classId, 'batch:', batchId);
+      
+      const students = await this.studentModel
+        .find({
+          class: classId,
+          batch: batchId,
+          isActive: true,
+          status: 'active',
+        })
+        .lean()
+        .sort({ registrationId: 1 })
+        .exec();
 
-    console.log('Query result count:',students, students.length);
-    
-    if (students.length > 0) {
-      console.log('First student sample:', {
-        _id: students[0]._id,
-        registrationId: students[0].registrationId,
-        name: students[0].nameEnglish,
-        class: students[0].class,
-        batch: students[0].batch,
-      });
-    }
+      console.log('Query result count:', students.length);
+      
+      if (students.length > 0) {
+        console.log('First student sample:', {
+          _id: students[0]._id,
+          registrationId: students[0].registrationId,
+          name: students[0].nameEnglish,
+          class: students[0].class,
+          batch: students[0].batch,
+        });
+      }
 
-    return students.map(student => ({
-      studentId: student._id.toString(),
-      registrationId: student.registrationId,
-      name: student.nameEnglish,
-      marks: 0,
-      percentage: 0,
-      isPassed: false,
-      isAbsent: false,
-    }));
-  } catch (error) {
-    console.error('Get students for result entry error:', error);
-    if (error instanceof BadRequestException) {
-      throw error;
+      return students.map(student => ({
+        studentId: student._id.toString(),
+        registrationId: student.registrationId,
+        name: student.nameEnglish,
+        marks: 0,
+        percentage: 0,
+        isPassed: false,
+        isAbsent: false,
+      }));
+    } catch (error) {
+      console.error('Get students for result entry error:', error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to fetch students for result entry');
     }
-    throw new InternalServerErrorException('Failed to fetch students for result entry');
   }
-}
 
-  // Get results by creator (user)
   async getResultsByCreator(userId: string, queryDto?: ResultQueryDto): Promise<{
     data: ResultResponseDto[];
     total: number;
@@ -1298,6 +1404,7 @@ async getStudentsForResultEntry(classId: string, batchId: string): Promise<IStud
           .populate('studentDetails')
           .populate('classDetails')
           .populate('batchDetails')
+          .populate('subjectDetails', 'subjectName subjectCode creditHours')
           .populate('createdByUser', 'email username role name')
           .populate('updatedByUser', 'email username role name')
           .sort(sort)

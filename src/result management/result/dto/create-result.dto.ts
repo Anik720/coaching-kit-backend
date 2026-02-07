@@ -1,82 +1,83 @@
-import { 
-  IsNotEmpty, 
-  IsString, 
-  IsNumber, 
-  IsBoolean, 
-  IsOptional, 
-  IsArray, 
-  ValidateNested,
-  IsMongoId,
-  Min,
-  Max 
-} from 'class-validator';
+import { IsString, IsNumber, IsBoolean, IsOptional, IsArray, ValidateNested, IsMongoId, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
 
-class SubjectMarkDto {
-  @IsNotEmpty()
-  @IsString()
+export class SubjectMarkDto {
+  @ApiProperty({ description: 'Subject ID' })
+  @IsMongoId()
   subject: string;
 
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Subject name' })
+  @IsOptional()
+  @IsString()
+  subjectName?: string;
+
+  @ApiProperty({ description: 'Total marks for the subject' })
   @IsNumber()
   @Min(0)
   totalMarks: number;
 
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Obtained marks for the subject' })
   @IsNumber()
   @Min(0)
   obtainedMarks: number;
 }
 
 export class CreateResultDto {
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Exam ID' })
   @IsMongoId()
   exam: string;
 
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Student ID' })
   @IsMongoId()
   student: string;
 
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Class ID' })
   @IsMongoId()
   class: string;
 
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Batch ID' })
   @IsMongoId()
   batch: string;
 
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Total marks' })
   @IsNumber()
   @Min(0)
   totalMarks: number;
 
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Obtained marks' })
   @IsNumber()
   @Min(0)
   obtainedMarks: number;
 
+  @ApiProperty({ description: 'Grade (optional - will be auto-calculated)', required: false })
   @IsOptional()
   @IsString()
   grade?: string;
 
+  @ApiProperty({ description: 'GPA (optional - will be auto-calculated)', required: false })
   @IsOptional()
   @IsNumber()
   @Min(0)
-  @Max(5.0)
+  @Max(5)
   gpa?: number;
 
+  @ApiProperty({ description: 'Result class (optional - will be auto-calculated)', required: false })
+  @IsOptional()
+  @IsString()
+  resultClass?: string;
+
+  @ApiProperty({ description: 'Is student absent?', required: false, default: false })
   @IsOptional()
   @IsBoolean()
-  isPassed?: boolean;
+  isAbsent?: boolean;
 
-  @IsOptional()
-  @IsBoolean()
-  isAbsent?: boolean = false;
-
+  @ApiProperty({ description: 'Remarks (optional - will be auto-calculated)', required: false })
   @IsOptional()
   @IsString()
   remarks?: string;
 
+  @ApiProperty({ type: [SubjectMarkDto], description: 'Subject-wise marks', required: false })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

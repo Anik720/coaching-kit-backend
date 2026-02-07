@@ -31,6 +31,10 @@ export class ResultQueryDto {
 
   @IsOptional()
   @IsString()
+  subject?: string; // New filter by subject ID
+
+  @IsOptional()
+  @IsString()
   grade?: string;
 
   @IsOptional()

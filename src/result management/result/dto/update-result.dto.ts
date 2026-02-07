@@ -1,82 +1,16 @@
-import { 
-  IsOptional, 
-  IsNumber, 
-  IsString, 
-  IsBoolean, 
-  IsArray, 
-  ValidateNested,
-  Min,
-  Max 
-} from 'class-validator';
-import { Type } from 'class-transformer';
+import { PartialType } from '@nestjs/swagger';
+import { CreateResultDto } from './create-result.dto';
+import { IsOptional, IsString } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
-class SubjectMarkDto {
-  @IsOptional()
-  @IsString()
-  subject?: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  totalMarks?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  obtainedMarks?: number;
-}
-
-export class UpdateResultDto {
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  totalMarks?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  obtainedMarks?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  percentage?: number;
-
-  @IsOptional()
-  @IsString()
-  grade?: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(5.0)
-  gpa?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  position?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  isPassed?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  isAbsent?: boolean;
-
+export class UpdateResultDto extends PartialType(CreateResultDto) {
+  @ApiProperty({ description: 'Result class', required: false })
   @IsOptional()
   @IsString()
   resultClass?: string;
 
+  @ApiProperty({ description: 'Remarks', required: false })
   @IsOptional()
   @IsString()
   remarks?: string;
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => SubjectMarkDto)
-  subjectWiseMarks?: SubjectMarkDto[];
 }

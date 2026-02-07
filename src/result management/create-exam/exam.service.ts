@@ -277,6 +277,7 @@ export class ExamService {
     }
 
     const updateData: any = {};
+    if (dto.isPublished !== undefined) updateData.isPublished = dto.isPublished;
     
     // Update fields if provided
     if (dto.examName !== undefined) updateData.examName = dto.examName.trim();

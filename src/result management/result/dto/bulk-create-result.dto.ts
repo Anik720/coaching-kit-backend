@@ -7,10 +7,10 @@ import {
   IsObject, 
   ValidateNested,
   IsMongoId, 
-  Min
+  Min,
+  ValidateIf
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Types } from 'mongoose';
 
 export class StudentResultDto {
   @IsNotEmpty()

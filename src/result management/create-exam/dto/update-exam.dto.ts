@@ -158,4 +158,12 @@ export class UpdateExamDto {
   @IsBoolean()
   @IsOptional()
   useGPASystem?: boolean;
+    @ApiProperty({ 
+    example: true, 
+    description: 'Published status',
+    required: false 
+  })
+  @IsBoolean()
+  @IsOptional()
+  isPublished?: boolean;
 }

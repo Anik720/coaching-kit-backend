@@ -6,6 +6,7 @@ import { Batch } from 'src/AcademicFunction/btach/batch.schema';
 import { Exam } from '../create-exam/exam.schema';
 import { Student } from 'src/student/schemas/student.schema';
 
+
 export type ResultDocument = Result & Document;
 
 @Schema({
@@ -113,11 +114,16 @@ export class Result {
   })
   remarks: string;
 
-  // Subject-wise marks (for future expansion)
+  // Subject-wise marks with subject ID
   @Prop({
     type: [
       {
-        subject: { type: String, required: true },
+        subject: {
+          type: Types.ObjectId,
+          ref: 'Subject',
+          required: true
+        },
+        subjectName: { type: String, required: true },
         totalMarks: { type: Number, required: true, min: 0 },
         obtainedMarks: { type: Number, required: true, min: 0 },
       }
@@ -125,7 +131,8 @@ export class Result {
     default: [],
   })
   subjectWiseMarks: Array<{
-    subject: string;
+    subject: Types.ObjectId;
+    subjectName: string;
     totalMarks: number;
     obtainedMarks: number;
   }>;
@@ -159,6 +166,7 @@ export class Result {
   batchDetails?: Batch;
   createdByUser?: any;
   updatedByUser?: any;
+  subjectDetails?: any[];
 }
 
 export const ResultSchema = SchemaFactory.createForClass(Result);
@@ -215,6 +223,13 @@ ResultSchema.virtual('updatedByUser', {
   justOne: true,
 });
 
+// Virtual population for subject details
+ResultSchema.virtual('subjectDetails', {
+  ref: 'Subject',
+  localField: 'subjectWiseMarks.subject',
+  foreignField: '_id',
+});
+
 // Pre-save middleware to calculate percentage and status
 ResultSchema.pre('save', function (next) {
   const result = this as ResultDocument;
@@ -232,6 +247,28 @@ ResultSchema.pre('save', function (next) {
     result.obtainedMarks = 0;
     result.percentage = 0;
     result.isPassed = false;
+  }
+
+  // Validate subject-wise marks if provided
+  if (result.subjectWiseMarks && result.subjectWiseMarks.length > 0) {
+    // Ensure obtained marks don't exceed total marks per subject
+    result.subjectWiseMarks.forEach(subjectMark => {
+      if (subjectMark.obtainedMarks > subjectMark.totalMarks) {
+        throw new Error(`Obtained marks (${subjectMark.obtainedMarks}) exceed total marks (${subjectMark.totalMarks}) for subject ${subjectMark.subjectName}`);
+      }
+    });
+
+    // Optional: Validate total of subject-wise marks equals overall marks
+    const subjectTotal = result.subjectWiseMarks.reduce((sum, sm) => sum + sm.totalMarks, 0);
+    const subjectObtained = result.subjectWiseMarks.reduce((sum, sm) => sum + sm.obtainedMarks, 0);
+    
+    if (Math.abs(subjectTotal - result.totalMarks) > 0.01) {
+      console.warn(`Subject-wise total marks (${subjectTotal}) don't match overall total marks (${result.totalMarks})`);
+    }
+    
+    if (Math.abs(subjectObtained - result.obtainedMarks) > 0.01) {
+      console.warn(`Subject-wise obtained marks (${subjectObtained}) don't match overall obtained marks (${result.obtainedMarks})`);
+    }
   }
 
   next();

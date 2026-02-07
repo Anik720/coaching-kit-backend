@@ -11,6 +11,7 @@ import {
   Request,
   HttpStatus,
   HttpCode,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -44,19 +45,32 @@ import { UpdateResultDto } from './dto/update-result.dto';
 export class ResultController {
   constructor(private readonly resultService: ResultService) {}
 
-  @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.TEACHER, UserRole.STAFF)
-  @ApiOperation({ summary: 'Create a new result' })
-  @ApiResponse({ status: 201, description: 'Result created successfully', type: ResultResponseDto })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 404, description: 'Exam or student not found' })
-  @ApiResponse({ status: 409, description: 'Result already exists' })
-  async create(
-    @Body() createResultDto: CreateResultDto,
-    @Request() req,
-  ): Promise<ResultResponseDto> {
-    return this.resultService.create(createResultDto, req.user.userId);
+@Post()
+@Roles(UserRole.SUPER_ADMIN, UserRole.USER_ADMIN, UserRole.TEACHER, UserRole.STAFF)
+@ApiOperation({ summary: 'Create a new result' })
+@ApiResponse({ status: 201, description: 'Result created successfully', type: ResultResponseDto })
+@ApiResponse({ status: 400, description: 'Bad request' })
+@ApiResponse({ status: 404, description: 'Exam or student not found' })
+@ApiResponse({ status: 409, description: 'Result already exists' })
+async create(
+  @Body() createResultDto: CreateResultDto,
+  @Request() req,
+): Promise<ResultResponseDto> {
+  console.log('User object from request:', req.user); // Debug log
+  console.log('User ID from request:', req.user?.userId); // Debug log
+  console.log('User _id from request:', req.user?._id); // Debug log
+  
+  // Try different ways to get user ID
+  const userId = req.user?.userId || req.user?.id || req.user?._id;
+  
+  if (!userId) {
+    console.error('No user ID found in request:', req.user);
+    throw new BadRequestException('User ID not found in request');
   }
+  
+  console.log('Using userId:', userId);
+  return this.resultService.create(createResultDto, userId);
+}
 
   @Post('bulk')
   @Roles(UserRole.SUPER_ADMIN,UserRole.USER_ADMIN, UserRole.TEACHER, UserRole.STAFF)
