@@ -12,6 +12,7 @@ import { SuggestionComplaintModule } from './suggestion-complaint/suggestion-com
 import { TeacherModule } from './teacher/teacher.module';
 import { AttendanceModule } from './teacher attendence/attendance.module';
 import { InstituteModule } from './institute/institute.module';
+import { ResultManagementModule } from './result management/result-management.module';
 
 
 @Module({
@@ -36,7 +37,8 @@ import { InstituteModule } from './institute/institute.module';
      SuggestionComplaintModule,
      TeacherModule,
      AttendanceModule,
-     InstituteModule
+     InstituteModule,
+     ResultManagementModule
 
   ],
   controllers: [AppController],

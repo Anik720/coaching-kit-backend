@@ -9,10 +9,10 @@ import { BatchModule } from '../btach/batch.module';
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Class.name, schema: ClassSchema }]),
-    BatchModule, // Add this line
+    BatchModule,
   ],
   controllers: [ClassController],
   providers: [ClassService],
-  exports: [ClassService],
+  exports: [MongooseModule, ClassService], // Add MongooseModule to exports!
 })
 export class ClassModule {}
